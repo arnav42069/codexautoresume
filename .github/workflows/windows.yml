@@ -13,10 +13,14 @@ jobs:
       - name: Test npm installer and launcher
         shell: pwsh
         run: |
-          node --test tests/npm/*.test.cjs 2>&1 | Tee-Object -Variable testOutput
+          $PSNativeCommandUseErrorActionPreference = $false
+          $testOutput = & node --test tests/npm/cli.test.cjs tests/npm/installer.test.cjs 2>&1
           $testExit = $LASTEXITCODE
+          $testOutput | Write-Output
           if ($testExit -ne 0) {
             $testOutput | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            $details = ($testOutput | Out-String).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=npm tests::$details"
             exit $testExit
           }
       - name: Install from GitHub, check native startup, and uninstall

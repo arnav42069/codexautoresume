@@ -15,6 +15,6 @@
   "files": ["npm/", "README.md", "LICENSE", "docs/"],
   "scripts": {
     "postinstall": "node npm/postinstall.cjs",
-    "test": "node --test tests/npm/*.test.cjs"
+    "test": "node --test tests/npm/cli.test.cjs tests/npm/installer.test.cjs"
   }
 }
