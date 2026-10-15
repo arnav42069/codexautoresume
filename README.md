@@ -1,5 +1,10 @@
 # Codex AutoResume
 
+[![CI](https://img.shields.io/github/actions/workflow/status/arnav42069/codexautoresume/windows.yml?branch=main&label=CI&logo=github)](https://github.com/arnav42069/codexautoresume/actions/workflows/windows.yml)
+[![Version](https://img.shields.io/github/v/release/arnav42069/codexautoresume?label=version)](https://github.com/arnav42069/codexautoresume/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/arnav42069/codexautoresume)](LICENSE)
+[![Platform: Windows x64](https://img.shields.io/badge/platform-Windows%20x64-0078D4)](#install)
+
 A Windows tray app that resumes interrupted Codex work when usage is available again.
 
 - Queue up to five existing conversations.
