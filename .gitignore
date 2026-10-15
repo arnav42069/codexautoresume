@@ -5,4 +5,5 @@ artifacts/
 *.user
 TestResults/
 /native/
+node_modules/
 *.tgz

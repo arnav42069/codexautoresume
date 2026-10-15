@@ -1,5 +1,6 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 
 try {
     $source = $env:AUTORESUME_INSTALL_SOURCE
@@ -10,7 +11,7 @@ try {
             throw 'Only the pinned HTTPS GitHub release is supported.'
         }
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $destination -MaximumRedirection 5
+        Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $destination -MaximumRedirection 5 -TimeoutSec 180
     } elseif ($env:AUTORESUME_INSTALL_ACTION -eq 'extract') {
         Add-Type -AssemblyName System.IO.Compression
         Add-Type -AssemblyName System.IO.Compression.FileSystem
