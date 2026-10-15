@@ -114,7 +114,9 @@ for (const mode of ['traversal', 'symlink']) {
   test(`native ZIP extraction rejects ${mode} entries`, { skip: process.platform !== 'win32' }, async t => {
     const { root, metadata } = fixture(t);
     const archive = path.join(root, 'unsafe.zip');
-    const script = `Add-Type -AssemblyName System.IO.Compression.FileSystem
+    const script = `$ErrorActionPreference = 'Stop'
+      Add-Type -AssemblyName System.IO.Compression
+      Add-Type -AssemblyName System.IO.Compression.FileSystem
       $zip = [IO.Compression.ZipFile]::Open($env:AUTORESUME_TEST_ARCHIVE, [IO.Compression.ZipArchiveMode]::Create)
       $name = if ($env:AUTORESUME_TEST_MODE -eq 'traversal') { '../outside.txt' } else { 'link.txt' }
       $entry = $zip.CreateEntry($name)

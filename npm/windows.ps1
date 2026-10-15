@@ -12,6 +12,7 @@ try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $destination -MaximumRedirection 5
     } elseif ($env:AUTORESUME_INSTALL_ACTION -eq 'extract') {
+        Add-Type -AssemblyName System.IO.Compression
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         $root = [IO.Path]::GetFullPath($destination).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
         $zip = [IO.Compression.ZipFile]::OpenRead($source)
