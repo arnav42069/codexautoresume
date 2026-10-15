@@ -5,14 +5,7 @@ $ProgressPreference = 'SilentlyContinue'
 try {
     $source = $env:AUTORESUME_INSTALL_SOURCE
     $destination = $env:AUTORESUME_INSTALL_DESTINATION
-    if ($env:AUTORESUME_INSTALL_ACTION -eq 'download') {
-        $uri = [Uri]$source
-        if ($uri.Scheme -ne 'https' -or $uri.Host -ne 'github.com') {
-            throw 'Only the pinned HTTPS GitHub release is supported.'
-        }
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $destination -MaximumRedirection 5 -TimeoutSec 180
-    } elseif ($env:AUTORESUME_INSTALL_ACTION -eq 'extract') {
+    if ($env:AUTORESUME_INSTALL_ACTION -eq 'extract') {
         Add-Type -AssemblyName System.IO.Compression
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         $root = [IO.Path]::GetFullPath($destination).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar

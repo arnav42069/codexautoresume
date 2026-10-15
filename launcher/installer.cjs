@@ -6,6 +6,29 @@ const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const release = require('./release.json');
 
+function downloadRelease(url, file, { run = spawnSync,
+  command = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'curl.exe') } = {}) {
+  const source = new URL(url);
+  if (source.protocol !== 'https:' || source.hostname !== 'github.com' || source.username || source.password) {
+    throw new Error('Only the pinned HTTPS GitHub release is supported.');
+  }
+  // Windows ships curl. Its transfer meter stays visible with npm --foreground-scripts,
+  // and avoids Windows PowerShell's slow Invoke-WebRequest download path.
+  const result = run(command, ['--fail', '--location', '--show-error',
+    '--proto', '=https', '--proto-redir', '=https', '--max-redirs', '5',
+    '--connect-timeout', '20', '--max-time', '300', '--speed-limit', '1024', '--speed-time', '45',
+    '--retry', '1', '--retry-delay', '2', '--retry-max-time', '10',
+    '--output', file, url], { stdio: 'inherit', windowsHide: true, shell: false, timeout: 310000 });
+  if (result.error?.code === 'ENOENT') {
+    throw new Error('Windows curl.exe is unavailable. Download and extract the ZIP in your browser: ' + url);
+  }
+  if (result.error || result.status !== 0) {
+    const reason = result.status === 28 || result.error?.code === 'ETIMEDOUT'
+      ? 'The download stalled or timed out.' : `The HTTPS download failed (curl ${result.status ?? 'terminated'}).`;
+    throw new Error(reason + ' You can download and extract the ZIP in your browser: ' + url);
+  }
+}
+
 function sha256(file) {
   const hash = crypto.createHash('sha256');
   const descriptor = fs.openSync(file, 'r');
@@ -38,7 +61,7 @@ function powershell(action, source, destination) {
   // Pass paths via the environment; never interpolate user paths into PowerShell code.
   const script = fs.readFileSync(path.join(__dirname, 'windows.ps1'), 'utf8');
   const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
-    stdio: 'inherit', windowsHide: true, shell: false,
+    stdio: 'inherit', windowsHide: true, shell: false, timeout: 120000,
     env: { ...process.env, AUTORESUME_INSTALL_ACTION: action,
       AUTORESUME_INSTALL_SOURCE: source, AUTORESUME_INSTALL_DESTINATION: destination },
   });
@@ -49,7 +72,7 @@ function powershell(action, source, destination) {
 
 function createInstaller({ root = path.resolve(__dirname, '..', 'native'), platform = process.platform,
   arch = process.arch, metadata = release,
-  download = (url, file) => powershell('download', url, file),
+  download = downloadRelease,
   extract = (archive, directory) => powershell('extract', archive, directory),
   log = console.log } = {}) {
   function checkPlatform() {
@@ -89,8 +112,11 @@ function createInstaller({ root = path.resolve(__dirname, '..', 'native'), platf
       const archive = path.join(staging, 'release.zip');
       const unpacked = path.join(staging, 'unpacked');
       log(`Downloading Codex AutoResume ${kind === 'probe' ? 'diagnostic ' : ''}v${metadata.version}…`);
+      log(metadata.baseUrl + info.asset);
       await download(metadata.baseUrl + info.asset, archive);
+      log('Checking SHA-256…');
       if (sha256(archive) !== info.sha256) throw new Error('Release SHA-256 mismatch. Installation stopped; nothing was extracted.');
+      log('Extracting the Windows app…');
       await extract(archive, unpacked);
       const executable = path.join(unpacked, info.executable);
       assertExecutable(executable, info.subsystem);
@@ -106,4 +132,4 @@ function createInstaller({ root = path.resolve(__dirname, '..', 'native'), platf
   return { install, getInstalled, checkPlatform, version: metadata.version };
 }
 
-module.exports = { createInstaller, assertExecutable, sha256 };
+module.exports = { createInstaller, assertExecutable, sha256, downloadRelease };

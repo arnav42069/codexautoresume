@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
-const { createInstaller, sha256 } = require('../../launcher/installer.cjs');
+const { createInstaller, sha256, downloadRelease } = require('../../launcher/installer.cjs');
 
 function executable(subsystem = 2) {
   const bytes = Buffer.alloc(512);
@@ -16,6 +16,38 @@ function executable(subsystem = 2) {
   return bytes;
 }
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+
+test('downloads reject unexpected hosts, credentials and plain HTTP before starting a process', () => {
+  for (const url of ['http://github.com/release.zip', 'https://example.com/release.zip', 'https://user:password@github.com/release.zip']) {
+    assert.throws(() => downloadRelease(url, 'unused', { run() { assert.fail('must not start'); } }), /pinned HTTPS GitHub/);
+  }
+});
+
+test('the native downloader passes paths as arguments without a shell or disabling TLS checks', () => {
+  const url = 'https://github.com/owner/repo/releases/download/v1/app.zip';
+  const file = 'C:\\user files & symbols\\release.zip';
+  downloadRelease(url, file, { command: 'C:\\Windows\\System32\\curl.exe', run(command, args, options) {
+    assert.equal(command, 'C:\\Windows\\System32\\curl.exe');
+    assert.equal(args[args.indexOf('--output') + 1], file);
+    assert.equal(args.at(-1), url);
+    assert.ok(!args.includes('--insecure')); assert.equal(options.shell, false);
+    assert.equal(options.stdio, 'inherit'); assert.ok(options.timeout > 0);
+    return { status: 0 };
+  } });
+});
+
+for (const result of [{ status: 22 }, { status: 28 }, { status: null, error: { code: 'ETIMEDOUT' } },
+  { status: null, error: { code: 'ENOENT' } }]) {
+  test(`failed downloads report a browser fallback (${result.error?.code || result.status})`, () => {
+    const url = 'https://github.com/owner/repo/releases/download/v1/app.zip';
+    assert.throws(() => downloadRelease(url, 'unused', { run() { return result; } }), error => {
+      assert.ok(error.message.includes(url));
+      assert.match(error.message, /browser/);
+      if (result.status === 28 || result.error?.code === 'ETIMEDOUT') assert.match(error.message, /timed out/);
+      return true;
+    });
+  });
+}
 
 function fixture(t, overrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'autoresume npm & test-'));

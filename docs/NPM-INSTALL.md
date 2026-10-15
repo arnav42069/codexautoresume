@@ -3,7 +3,7 @@
 On Windows x64, install Node.js 20.19 or later and Git, then run:
 
 ```powershell
-npm install -g https://github.com/arnav42069/codexautoresume/archive/refs/heads/main.tar.gz
+npm install -g --foreground-scripts https://github.com/arnav42069/codexautoresume/archive/refs/heads/main.tar.gz
 codexautoresume
 ```
 
@@ -39,9 +39,13 @@ not guarantee updates in the Desktop UI. The installer does not change this limi
 
 ## If installation stops
 
-The installer needs HTTPS access to GitHub Releases and Windows PowerShell. A
+The installer uses Windows curl to show download progress; Windows PowerShell
+extracts the verified ZIP. It needs HTTPS access to GitHub Releases. A
 failed download or checksum check stops installation; it never runs an unverified
-download. Close the tray app and reinstall if existing program files are damaged.
+download. Connections time out after 20 seconds; a stalled transfer stops after
+45 seconds, and the whole download has a five-minute limit. If your connection
+needs longer, use the ZIP link printed by the installer in your browser.
+Close the tray app and reinstall if existing program files are damaged.
 
 If your npm policy disables lifecycle scripts, install the payload explicitly:
 
