@@ -1,0 +1,87 @@
+name: Release Windows build
+
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.426'
+      - name: Test and build the Windows application
+        shell: pwsh
+        run: ./scripts/build.ps1
+      - name: Build the companion continuity diagnostic
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet publish tools/CodexAutoResume.Probe -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false `
+            -o artifacts/desktop-probe-win-x64
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic publish failed.' }
+          Copy-Item docs/DESKTOP-FEASIBILITY.md artifacts/desktop-probe-win-x64/README.md
+          Copy-Item LICENSE artifacts/desktop-probe-win-x64/LICENSE
+          Compress-Archive -Path artifacts/desktop-probe-win-x64/* `
+            -DestinationPath artifacts/CodexAutoResume-DesktopProbe-win-x64.zip -Force
+      - name: Create ZIP checksums
+        shell: pwsh
+        run: |
+          $checksums = foreach ($name in @('CodexAutoResume-win-x64.zip', 'CodexAutoResume-DesktopProbe-win-x64.zip')) {
+            $hash = (Get-FileHash "artifacts/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $name"
+          }
+          $checksums | Set-Content artifacts/SHA256SUMS.txt -Encoding ascii
+      - name: Upload and publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:GITHUB_REF_NAME
+          $notes = "docs/releases/$tag.md"
+          if (-not (Test-Path $notes)) { throw "Missing release notes: $notes" }
+          gh release create $tag artifacts/CodexAutoResume-win-x64.zip `
+            artifacts/CodexAutoResume-DesktopProbe-win-x64.zip artifacts/SHA256SUMS.txt `
+            --repo $env:GITHUB_REPOSITORY --verify-tag --draft `
+            --title "Codex AutoResume $tag" --notes-file $notes
+          if ($LASTEXITCODE -ne 0) { throw 'Release creation or asset upload failed; release was not published.' }
+          $release = gh release view $tag --repo $env:GITHUB_REPOSITORY --json assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not verify uploaded assets.' }
+          foreach ($name in @('CodexAutoResume-win-x64.zip', 'CodexAutoResume-DesktopProbe-win-x64.zip', 'SHA256SUMS.txt')) {
+            if ($release.assets.name -notcontains $name) { throw "Missing release asset: $name" }
+          }
+          gh release edit $tag --repo $env:GITHUB_REPOSITORY --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }
+      - name: Verify public release and ZIP download
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $base = "https://github.com/$env:GITHUB_REPOSITORY/releases"
+          $tag = $env:GITHUB_REF_NAME
+          $page = Invoke-WebRequest "$base/tag/$tag"
+          if ($page.StatusCode -ne 200) { throw 'Release page is not accessible.' }
+          foreach ($name in @('CodexAutoResume-win-x64.zip', 'CodexAutoResume-DesktopProbe-win-x64.zip')) {
+            $url = "$base/download/$tag/$name"
+            $download = Join-Path $env:RUNNER_TEMP $name
+            Invoke-WebRequest $url -OutFile $download
+            $expected = (Get-FileHash "artifacts/$name" -Algorithm SHA256).Hash
+            if ((Get-FileHash $download -Algorithm SHA256).Hash -ne $expected) { throw "Download hash mismatch: $name" }
+            $zip = [System.IO.Compression.ZipFile]::OpenRead($download)
+            try {
+              $exe = if ($name -eq 'CodexAutoResume-win-x64.zip') { 'CodexAutoResume.exe' } else { 'CodexAutoResume.Probe.exe' }
+              if ($zip.Entries.FullName -notcontains $exe) { throw "Executable missing from $name" }
+            } finally { $zip.Dispose() }
+            Write-Output "Verified download: $url"
+          }

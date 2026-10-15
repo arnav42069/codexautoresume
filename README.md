@@ -15,7 +15,7 @@ Completed work stays completed. Turning **OFF** stops future continuations witho
 
 You need Windows 10/11, the native Codex CLI and Git. Sign in to Codex first.
 
-1. Build below, or get the ZIP from a successful [Actions run](https://github.com/arnav42069/codexautoresume/actions).
+1. Download the Windows ZIP from [Releases](https://github.com/arnav42069/codexautoresume/releases), or build below.
 2. Extract it and open `CodexAutoResume.exe`.
 3. Connect to `codex.exe`, add your verified sessions, set priorities, then switch **ON**.
 
