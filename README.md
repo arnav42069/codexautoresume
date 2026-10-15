@@ -15,11 +15,21 @@ Completed work stays completed. Turning **OFF** stops future continuations witho
 
 You need Windows 10/11, the native Codex CLI and Git. Sign in to Codex first.
 
-1. Download the Windows ZIP from [Releases](https://github.com/arnav42069/codexautoresume/releases), or build below.
-2. Extract it and open `CodexAutoResume.exe`.
-3. Connect to `codex.exe`, add your verified sessions, set priorities, then switch **ON**.
+With Node.js 20.19+ on Windows x64:
+
+```powershell
+npm install -g git+https://github.com/arnav42069/codexautoresume.git
+codexautoresume
+```
+
+This downloads the Windows release and checks its SHA-256 hash. No .NET installation needed.
+Prefer a ZIP? Download it from [Releases](https://github.com/arnav42069/codexautoresume/releases), extract it and open `CodexAutoResume.exe`.
+
+Connect to `codex.exe`, add your verified sessions, set priorities, then switch **ON**.
 
 Closing the window keeps it running in the tray.
+
+[npm commands and uninstall](docs/NPM-INSTALL.md)
 
 ## Build
 

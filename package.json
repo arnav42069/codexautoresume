@@ -1,0 +1,20 @@
+{
+  "name": "codexautoresume",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Install and launch the Codex AutoResume Windows tray app.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arnav42069/codexautoresume.git"
+  },
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "engines": { "node": ">=20.19.0" },
+  "bin": { "codexautoresume": "npm/cli.cjs" },
+  "files": ["npm/", "README.md", "LICENSE", "docs/"],
+  "scripts": {
+    "postinstall": "node npm/postinstall.cjs",
+    "test": "node --test tests/npm/*.test.cjs"
+  }
+}

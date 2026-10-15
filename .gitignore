@@ -4,3 +4,5 @@ artifacts/
 .vs/
 *.user
 TestResults/
+/native/
+*.tgz
