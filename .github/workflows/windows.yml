@@ -29,13 +29,16 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
           $prefix = Join-Path $env:RUNNER_TEMP 'AutoResume npm & smoke test'
           try {
             $packed = npm pack --ignore-scripts --json --pack-destination $env:RUNNER_TEMP | ConvertFrom-Json
             if ($LASTEXITCODE -ne 0) { throw 'npm pack failed' }
             if ($packed.files.path -match '\.(exe|zip)$') { throw 'Compiled files must stay in GitHub Releases' }
-            npm install --global --prefix $prefix "git+https://github.com/$env:GITHUB_REPOSITORY.git#$env:GITHUB_SHA"
-            if ($LASTEXITCODE -ne 0) { throw 'npm install from GitHub failed' }
+            $installOutput = & npm install --foreground-scripts --global --prefix $prefix "git+https://github.com/$env:GITHUB_REPOSITORY.git#$env:GITHUB_SHA" 2>&1
+            $installExit = $LASTEXITCODE
+            $installOutput | Write-Output
+            if ($installExit -ne 0) { throw ($installOutput | Out-String) }
             $command = Join-Path $prefix 'codexautoresume.cmd'
             & $command --version
             if ($LASTEXITCODE -ne 0) { throw 'npm launcher version check failed' }
@@ -50,7 +53,10 @@ jobs:
             'GitHub npm install, checksum verification, native startup, diagnostic install and uninstall passed.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           } catch {
             $_ | Out-String | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-            Write-Output "::error title=npm smoke test::$_"
+            $details = $_ | Out-String
+            if ($details.Length -gt 3500) { $details = $details.Substring($details.Length - 3500) }
+            $details = $details.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=npm smoke test::$details"
             throw
           }
       - uses: actions/setup-dotnet@v4
