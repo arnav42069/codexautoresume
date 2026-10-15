@@ -14,7 +14,6 @@
   "bin": { "codexautoresume": "npm/cli.cjs" },
   "files": ["npm/", "README.md", "LICENSE", "docs/"],
   "scripts": {
-    "prepare": "node --check npm/cli.cjs && node --check npm/installer.cjs && node --check npm/postinstall.cjs",
     "postinstall": "node npm/postinstall.cjs",
     "test": "node --test tests/npm/cli.test.cjs tests/npm/installer.test.cjs"
   }
