@@ -1,0 +1,52 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{FD0C371B-B51F-47D5-82F5-1781866A6251}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexAutoResume.Core", "src\CodexAutoResume.Core\CodexAutoResume.Core.csproj", "{E117E9E8-2A43-4709-ABF2-5274D757B6D4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexAutoResume.Windows", "src\CodexAutoResume.Windows\CodexAutoResume.Windows.csproj", "{E76B6239-7CE2-40AF-9756-E527854C2BCF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{B32EFC51-1C7C-4ECB-8AE8-4AB4B2C574A2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexAutoResume.Tests", "tests\CodexAutoResume.Tests\CodexAutoResume.Tests.csproj", "{EAB48E43-C162-4A82-BA8B-C5BD9F6D9F95}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{3E4B9FF9-EAFF-44E1-BA4B-544766BE21EB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexAutoResume.Probe", "tools\CodexAutoResume.Probe\CodexAutoResume.Probe.csproj", "{45A35313-B0DA-4125-88D9-00049DEF0B6C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E117E9E8-2A43-4709-ABF2-5274D757B6D4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E117E9E8-2A43-4709-ABF2-5274D757B6D4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E117E9E8-2A43-4709-ABF2-5274D757B6D4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E117E9E8-2A43-4709-ABF2-5274D757B6D4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E76B6239-7CE2-40AF-9756-E527854C2BCF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E76B6239-7CE2-40AF-9756-E527854C2BCF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E76B6239-7CE2-40AF-9756-E527854C2BCF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E76B6239-7CE2-40AF-9756-E527854C2BCF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EAB48E43-C162-4A82-BA8B-C5BD9F6D9F95}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EAB48E43-C162-4A82-BA8B-C5BD9F6D9F95}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EAB48E43-C162-4A82-BA8B-C5BD9F6D9F95}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EAB48E43-C162-4A82-BA8B-C5BD9F6D9F95}.Release|Any CPU.Build.0 = Release|Any CPU
+		{45A35313-B0DA-4125-88D9-00049DEF0B6C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45A35313-B0DA-4125-88D9-00049DEF0B6C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45A35313-B0DA-4125-88D9-00049DEF0B6C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45A35313-B0DA-4125-88D9-00049DEF0B6C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{E117E9E8-2A43-4709-ABF2-5274D757B6D4} = {FD0C371B-B51F-47D5-82F5-1781866A6251}
+		{E76B6239-7CE2-40AF-9756-E527854C2BCF} = {FD0C371B-B51F-47D5-82F5-1781866A6251}
+		{EAB48E43-C162-4A82-BA8B-C5BD9F6D9F95} = {B32EFC51-1C7C-4ECB-8AE8-4AB4B2C574A2}
+		{45A35313-B0DA-4125-88D9-00049DEF0B6C} = {3E4B9FF9-EAFF-44E1-BA4B-544766BE21EB}
+	EndGlobalSection
+EndGlobal

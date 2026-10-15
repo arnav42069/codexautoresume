@@ -1,0 +1,29 @@
+# Validation record
+
+Validated on the Linux development host on 2026-10-14 using .NET SDK 8.0.426 and codex-cli 0.159.2.
+
+| Check | Result |
+| --- | --- |
+| Automated policy, persistence, Git and transport suite | 45 passed, 0 failed; 45 executed |
+| Priority/sequential and starred parallel execution | Passed with deterministic fake execution |
+| Repository conflicts | Passed, including actual Git worktrees sharing one common directory |
+| Limit recovery, reset verification, unknown-reset backoff | Passed with structured simulated usage and deterministic time |
+| UUID mismatch and workspace drift | Passed; dispatch blocked |
+| Durable intent before dispatch, crash uncertainty, duplicates | Passed |
+| Independent events, stale completions, scoped reconciliation errors | Passed |
+| Approval denial and transient error handling | Passed |
+| Real subprocess JSON-RPC fixture | Passed framing, pagination, errors, identity targeting and serialized denial |
+| Actual installed app-server | Initialization and paginated discovery passed; 0 sessions returned; no turns submitted |
+| Release solution build | Passed with 0 warnings and 0 errors |
+
+The automated entry point is `dotnet run --project tests/CodexAutoResume.Tests -c Release`. Tests use a dependency-free executable runner with a nonzero failure exit status. They do not call a model. A separate `--live-smoke <native-codex-path>` command performs only initialization and discovery against the real app-server.
+
+The Windows artifact is cross-published from Linux as a self-contained, compressed single-file win-x64 executable. The runtime artifact is unsigned. SHA256SUMS.txt beside the release ZIP records the delivered executable/archive hashes.
+
+## Existing Desktop conversation follow-up — 2026-10-15
+
+The expanded automated suite executed **55 tests: 55 passed, 0 failed**. Ten additional subprocess cases cover exact UUID/context preservation, full history pagination, unknown UUID rejection without fallback, active/unfinished threads, empty context, changed UUID/history/workspace, and loss of exclusive ownership. These cases use synthetic protocol fixtures, not Desktop conversations. The complete solution, including the standalone probe, builds without warnings or errors.
+
+A repeated real app-server initialization/discovery check returned **0 sessions** on this Linux host. It sent no continuation and created no thread. Thus the feasibility check for the user's original Windows Desktop conversations remains **not verified**, regardless of passing generic tests. The standalone diagnostic must run against the exact original UUIDs on their Windows machine before proceeding with Desktop-session execution. See [the feasibility gate](DESKTOP-FEASIBILITY.md).
+
+Not executed on this host: native Windows WPF/tray rendering and behavior, Windows login startup, authenticated model continuation, actual usage-limit resets, and Desktop history/UI visibility. The Windows CI workflow and `scripts/build.ps1` include a native UI startup check, but that workflow has not been run here. Follow [the Windows acceptance checklist](WINDOWS-VALIDATION.md) for functional validation. Direct Desktop control and synchronization remain unsupported.
