@@ -19,7 +19,9 @@ jobs:
           $testOutput | Write-Output
           if ($testExit -ne 0) {
             $testOutput | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-            $details = ($testOutput | Out-String).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            $details = $testOutput | Out-String
+            if ($details.Length -gt 3500) { $details = $details.Substring($details.Length - 3500) }
+            $details = $details.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
             Write-Output "::error title=npm tests::$details"
             exit $testExit
           }
@@ -48,6 +50,7 @@ jobs:
             'GitHub npm install, checksum verification, native startup, diagnostic install and uninstall passed.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           } catch {
             $_ | Out-String | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            Write-Output "::error title=npm smoke test::$_"
             throw
           }
       - uses: actions/setup-dotnet@v4
