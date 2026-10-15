@@ -11,10 +11,10 @@
   "os": ["win32"],
   "cpu": ["x64"],
   "engines": { "node": ">=20.19.0" },
-  "bin": { "codexautoresume": "npm/cli.cjs" },
-  "files": ["npm/", "README.md", "LICENSE", "docs/"],
+  "bin": { "codexautoresume": "launcher/cli.cjs" },
+  "files": ["launcher/", "README.md", "LICENSE", "docs/"],
   "scripts": {
-    "postinstall": "node npm/postinstall.cjs",
+    "postinstall": "node launcher/postinstall.cjs",
     "test": "node --test tests/npm/cli.test.cjs tests/npm/installer.test.cjs"
   }
 }

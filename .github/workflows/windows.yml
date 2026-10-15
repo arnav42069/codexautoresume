@@ -30,7 +30,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $false
-          $prefix = Join-Path $env:RUNNER_TEMP 'AutoResume npm smoke test'
+          $prefix = Join-Path $env:RUNNER_TEMP 'autoresume-npm-smoke'
           try {
             $packed = npm pack --ignore-scripts --json --pack-destination $env:RUNNER_TEMP | ConvertFrom-Json
             if ($LASTEXITCODE -ne 0) { throw 'npm pack failed' }

@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
-const { createInstaller, sha256 } = require('../../npm/installer.cjs');
+const { createInstaller, sha256 } = require('../../launcher/installer.cjs');
 
 function executable(subsystem = 2) {
   const bytes = Buffer.alloc(512);
@@ -21,7 +21,7 @@ function fixture(t, overrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'autoresume npm & test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const archive = Buffer.from('verified fixture archive');
-  const metadata = structuredClone(require('../../npm/release.json'));
+  const metadata = structuredClone(require('../../launcher/release.json'));
   metadata.app.sha256 = metadata.probe.sha256 = digest(archive);
   const calls = [];
   const installer = createInstaller({ root, platform: 'win32', arch: 'x64', metadata, log() {},

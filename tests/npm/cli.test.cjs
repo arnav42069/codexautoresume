@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { run } = require('../../npm/cli.cjs');
+const { run } = require('../../launcher/cli.cjs');
 
 function fixture() {
   const calls = [];
