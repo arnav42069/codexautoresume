@@ -35,6 +35,13 @@ jobs:
             $packed = npm pack --ignore-scripts --json --pack-destination $env:RUNNER_TEMP | ConvertFrom-Json
             if ($LASTEXITCODE -ne 0) { throw 'npm pack failed' }
             if ($packed.files.path -match '\.(exe|zip)$') { throw 'Compiled files must stay in GitHub Releases' }
+            $tarball = Join-Path $env:RUNNER_TEMP $packed.filename
+            $installOutput = & npm install --foreground-scripts --global --prefix $prefix $tarball 2>&1
+            $installExit = $LASTEXITCODE
+            $installOutput | Write-Output
+            if ($installExit -ne 0) { throw ('Tarball install: ' + ($installOutput | Out-String)) }
+            npm uninstall --global --prefix $prefix codexautoresume
+            if ($LASTEXITCODE -ne 0) { throw 'Tarball uninstall failed' }
             $installOutput = & npm install --foreground-scripts --global --prefix $prefix "git+https://github.com/$env:GITHUB_REPOSITORY.git#$env:GITHUB_SHA" 2>&1
             $installExit = $LASTEXITCODE
             $installOutput | Write-Output
