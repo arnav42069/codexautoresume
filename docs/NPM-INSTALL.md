@@ -3,11 +3,11 @@
 On Windows x64, install Node.js 20.19 or later and Git, then run:
 
 ```powershell
-npm install -g git+https://github.com/arnav42069/codexautoresume.git
+npm install -g https://github.com/arnav42069/codexautoresume/archive/refs/heads/main.tar.gz
 codexautoresume
 ```
 
-Use the full GitHub URL. This package is not published on the npm registry.
+Use the full source-archive URL. This package is not published on the npm registry.
 The installer downloads the pinned Windows release, checks its SHA-256 hash and
 extracts it inside the npm package. It does not start the app or submit Codex work.
 The release includes .NET. The native Codex CLI and a signed-in account are still required.

@@ -25,7 +25,7 @@ jobs:
             Write-Output "::error title=npm tests::$details"
             exit $testExit
           }
-      - name: Install from GitHub, check native startup, and uninstall
+      - name: Install from GitHub archive, check native startup, and uninstall
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -42,7 +42,7 @@ jobs:
             if ($installExit -ne 0) { throw ('Tarball install: ' + ($installOutput | Out-String)) }
             npm uninstall --global --prefix $prefix codexautoresume
             if ($LASTEXITCODE -ne 0) { throw 'Tarball uninstall failed' }
-            $installOutput = & npm install --foreground-scripts --global --prefix $prefix "git+https://github.com/$env:GITHUB_REPOSITORY.git#$env:GITHUB_SHA" 2>&1
+            $installOutput = & npm install --foreground-scripts --global --prefix $prefix "https://github.com/$env:GITHUB_REPOSITORY/archive/$env:GITHUB_SHA.tar.gz" 2>&1
             $installExit = $LASTEXITCODE
             $installOutput | Write-Output
             if ($installExit -ne 0) { throw ($installOutput | Out-String) }
@@ -57,7 +57,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'npm uninstall failed' }
             if (Test-Path $command) { throw 'npm command was not removed' }
             if (Test-Path (Join-Path $prefix 'node_modules/codexautoresume')) { throw 'npm package was not removed' }
-            'GitHub npm install, checksum verification, native startup, diagnostic install and uninstall passed.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            'GitHub archive npm install, checksum verification, native startup, diagnostic install and uninstall passed.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           } catch {
             $_ | Out-String | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
             $details = $_ | Out-String

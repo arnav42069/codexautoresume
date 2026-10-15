@@ -18,7 +18,7 @@ You need Windows 10/11, the native Codex CLI and Git. Sign in to Codex first.
 With Node.js 20.19+ on Windows x64:
 
 ```powershell
-npm install -g git+https://github.com/arnav42069/codexautoresume.git
+npm install -g https://github.com/arnav42069/codexautoresume/archive/refs/heads/main.tar.gz
 codexautoresume
 ```
 
