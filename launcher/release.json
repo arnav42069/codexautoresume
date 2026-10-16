@@ -1,18 +1,18 @@
 {
-  "version": "0.2.2",
-  "baseUrl": "https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/",
+  "version": "0.3.0",
+  "baseUrl": "https://github.com/arnav42069/codexautoresume/releases/download/v0.3.0/",
   "platforms": {
     "win32-x64": {
       "app": {
         "asset": "CodexAutoResume-win-x64.zip",
-        "sha256": "4cf24202b577a2a8008420a71698884649c91d0dd72a0cb2d32b43337e5157bc",
+        "sha256": "d6e7fe76d4e8363a5eaf10c88b3aafaa205723543e711f5c753f78e46e460c86",
         "executable": "CodexAutoResume.exe",
         "subsystem": 2,
         "desktopShortcut": true
       },
       "probe": {
         "asset": "CodexAutoResume-DesktopProbe-win-x64.zip",
-        "sha256": "715410abe0308bfcca7a829ffd61b6704171c38e9d9f4809592449aea27ab7e6",
+        "sha256": "41589d97bcc6b49f16e9ed50a300970abd0914adf026d0765f4e532e22e9ac4e",
         "executable": "CodexAutoResume.Probe.exe",
         "subsystem": 3
       }
@@ -20,52 +20,52 @@
     "linux-x64": {
       "app": {
         "asset": "CodexAutoResume-linux-x64.zip",
-        "sha256": "dc548953dcbdfcbe9c5f5afde2889187cb75766b09a22c253bf97ef4f12980c3",
+        "sha256": "2be75000b2cf22b51e583de9c7ce810688337daa205e409e8ff6ac504d53590c",
         "executable": "CodexAutoResume",
         "desktopShortcut": true
       },
       "probe": {
         "asset": "CodexAutoResume-DesktopProbe-linux-x64.zip",
-        "sha256": "e5a6e2e463b658eea7d7ce7b85cb50682b5be3f229fa2f85af9866579f9e7290",
+        "sha256": "5e6696bf3fcf0d5af575dd02cf32457d11ba1966f5872a4c979fe1af76984420",
         "executable": "CodexAutoResume.Probe"
       }
     },
     "linux-arm64": {
       "app": {
         "asset": "CodexAutoResume-linux-arm64.zip",
-        "sha256": "783aa60504982378b33c8e65c4a23cec8e241927b7f03c300a57fcc1cc3bd514",
+        "sha256": "59f8ed4946dba9db13ec057ecb5b8386819b7dc74da25f8b8591d30d6898dc85",
         "executable": "CodexAutoResume",
         "desktopShortcut": true
       },
       "probe": {
         "asset": "CodexAutoResume-DesktopProbe-linux-arm64.zip",
-        "sha256": "6bb68a972ae995902ebe260c59a52349f97a5657a81f224b9af674e152c35a38",
+        "sha256": "4eef6cf041ce6a208f42b6ccae78569ee89badad4185cb3d5373aab822f0d7f0",
         "executable": "CodexAutoResume.Probe"
       }
     },
     "darwin-x64": {
       "app": {
         "asset": "CodexAutoResume-osx-x64.zip",
-        "sha256": "ea044a82518273a36f863b0b4c124c2403e586204709d875c1bf3a700bc6df2f",
+        "sha256": "dbd3d76822a8f0eb80c8e9aaf29e0a01b428c55ef043b53f843eddb07bc40d73",
         "executable": "CodexAutoResume.app/Contents/MacOS/CodexAutoResume",
         "desktopShortcut": true
       },
       "probe": {
         "asset": "CodexAutoResume-DesktopProbe-osx-x64.zip",
-        "sha256": "3424db3e1f52753f689e01a0457c0b5e742549b1f82204a113882f1f708c8780",
+        "sha256": "ea9b5b79b8bb30cc21bae76cb94c6eef302a5900df99b9b1691e8ac1de066c19",
         "executable": "CodexAutoResume.Probe"
       }
     },
     "darwin-arm64": {
       "app": {
         "asset": "CodexAutoResume-osx-arm64.zip",
-        "sha256": "67379ec6e33687465b24cb596d2f1accb766d805e559c859b2dea8ccbe4f6d67",
+        "sha256": "1f8e33255c547698608b4c4bd226bc5f38b133d14fa917e23bc7dab413149b2d",
         "executable": "CodexAutoResume.app/Contents/MacOS/CodexAutoResume",
         "desktopShortcut": true
       },
       "probe": {
         "asset": "CodexAutoResume-DesktopProbe-osx-arm64.zip",
-        "sha256": "466db4f695cef865fb87398b078a36edb8efaade3ff91859b52a4f7e17a083a1",
+        "sha256": "8d41124c576d6068289e24d00231ad33c5511342496aced6df4ec69d41967d84",
         "executable": "CodexAutoResume.Probe"
       }
     }

@@ -8,7 +8,7 @@
 
 A desktop app that resumes interrupted Codex work when usage is available again.
 
-![Windows Phosphor dashboard with sample conversations](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-Phosphor.png)
+![Read-only connection with a sample recent chat](https://github.com/arnav42069/codexautoresume/releases/download/v0.3.0/CodexAutoResume-Phosphor-readonly.png)
 
 - Connect with Codex Desktop open and discover your five recent chats.
 - Keep your queue and priorities across refreshes.
@@ -34,13 +34,13 @@ npm install -g --foreground-scripts https://github.com/arnav42069/codexautoresum
 Open **Codex AutoResume** from your new desktop shortcut, or run `codexautoresume`.
 The installer checks the release checksum. .NET is included.
 
-Prefer a ZIP? Download v0.2.2, extract it somewhere permanent and open the app. No Node.js or .NET installation is needed for the ZIP. First launch creates the shortcut.
+Prefer a ZIP? Download v0.3.0, extract it somewhere permanent and open the app. No Node.js or .NET installation is needed for the ZIP. First launch creates the shortcut.
 
 | Platform | Download |
 | --- | --- |
-| Windows | [x64](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-win-x64.zip) |
-| Linux | [x64](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-linux-x64.zip) · [ARM64](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-linux-arm64.zip) |
-| macOS | [Intel](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-osx-x64.zip) · [Apple Silicon](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-osx-arm64.zip) |
+| Windows | [x64](https://github.com/arnav42069/codexautoresume/releases/download/v0.3.0/CodexAutoResume-win-x64.zip) |
+| Linux | [x64](https://github.com/arnav42069/codexautoresume/releases/download/v0.3.0/CodexAutoResume-linux-x64.zip) · [ARM64](https://github.com/arnav42069/codexautoresume/releases/download/v0.3.0/CodexAutoResume-linux-arm64.zip) |
+| macOS | [Intel](https://github.com/arnav42069/codexautoresume/releases/download/v0.3.0/CodexAutoResume-osx-x64.zip) · [Apple Silicon](https://github.com/arnav42069/codexautoresume/releases/download/v0.3.0/CodexAutoResume-osx-arm64.zip) |
 
 Linux needs X11 or XWayland. macOS needs version 12+; builds are ad-hoc signed, not notarized.
 
