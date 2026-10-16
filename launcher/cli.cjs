@@ -4,16 +4,17 @@
 const childProcess = require('node:child_process');
 const { createInstaller } = require('./installer.cjs');
 
-const help = `Codex AutoResume — Windows tray app
+const help = `Codex AutoResume — Windows, Linux and macOS desktop app
 
   codexautoresume                   Open the app
   codexautoresume verify <args>     Run the Desktop continuity diagnostic
   codexautoresume install           Install if npm lifecycle scripts were disabled
   codexautoresume install --probe   Download the optional diagnostic
+  codexautoresume shortcut          Create or repair the desktop shortcut
   codexautoresume --version         Show the pinned application release
 
 Before using Desktop sessions, verify their original UUIDs with Desktop closed:
-  codexautoresume verify UUID --desktop-closed --codex "C:\\path\\codex.exe"
+  codexautoresume verify UUID --desktop-closed
 `;
 
 async function run(args, { installer = createInstaller(), spawn = childProcess.spawn,
@@ -21,6 +22,11 @@ async function run(args, { installer = createInstaller(), spawn = childProcess.s
   if (args[0] === '--help' || args[0] === '-h') { log(help); return 0; }
   if (args[0] === '--version') { log(installer.version); return 0; }
   installer.checkPlatform();
+  if (args[0] === 'shortcut') {
+    if (args.length !== 1) throw new Error('Use codexautoresume shortcut.');
+    if (!installer.createShortcut(true)) throw new Error('Update to a release with desktop shortcut support.');
+    return 0;
+  }
   if (args[0] === 'install') {
     if (args.length > 2 || (args[1] && args[1] !== '--probe')) throw new Error('Use codexautoresume install [--probe].');
     await installer.install(args[1] === '--probe' ? 'probe' : 'app');

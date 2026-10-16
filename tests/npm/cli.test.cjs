@@ -11,6 +11,7 @@ function fixture() {
     version: '0.1.0', checkPlatform() { calls.push(['platform']); },
     getInstalled(kind) { calls.push(['installed', kind]); return 'C:\\with spaces & symbols\\app.exe'; },
     async install(kind) { calls.push(['install', kind]); return 'C:\\with spaces & symbols\\probe.exe'; },
+    createShortcut(force) { calls.push(['shortcut', force]); return true; },
   };
   return { calls, installer, log() {} };
 }
@@ -19,6 +20,11 @@ test('help and version do not download or execute anything', async () => {
   const f = fixture();
   assert.equal(await run(['--help'], f), 0); assert.equal(await run(['--version'], f), 0);
   assert.deepEqual(f.calls, []);
+});
+
+test('the shortcut command explicitly repairs the shortcut without launching the UI',async()=>{
+  const f=fixture();assert.equal(await run(['shortcut'],f),0);
+  assert.deepEqual(f.calls,[['platform'],['shortcut',true]]);
 });
 
 test('launch detaches the exact installed executable without a shell', async () => {

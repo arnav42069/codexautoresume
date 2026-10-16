@@ -9,10 +9,16 @@ public partial class App : Application
     private Mutex? instance;
     private FileStream? stateLock;
     private string? smokeDirectory;
-    public static string DataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CodexAutoResume");
+    public static string DataDirectory => DesktopIntegration.DataDirectory;
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (e.Args.Contains("--create-shortcut") || e.Args.Contains("--ensure-shortcut"))
+        {
+            try { DesktopIntegration.CreateShortcut(Environment.ProcessPath!, force: e.Args.Contains("--create-shortcut")); Shutdown(0); }
+            catch (Exception ex) { Console.Error.WriteLine(ex.Message); Shutdown(1); }
+            return;
+        }
         var selfTest = e.Args.Contains("--self-test");
         instance = new Mutex(true, selfTest ? @"Local\CodexAutoResume.Smoke." + Guid.NewGuid() : @"Local\CodexAutoResume.Instance", out var created);
         if (!created) { MessageBox.Show("Codex AutoResume is already running. Open it from the system tray."); Shutdown(); return; }
@@ -20,6 +26,11 @@ public partial class App : Application
         {
             var directory = selfTest ? smokeDirectory = Path.Combine(Path.GetTempPath(), "CodexAutoResume-smoke-" + Guid.NewGuid()) : DataDirectory;
             Directory.CreateDirectory(directory);
+            if (!selfTest)
+            {
+                try { DesktopIntegration.CreateShortcut(Environment.ProcessPath!); }
+                catch (Exception ex) { Trace.WriteLine("Desktop shortcut: " + ex.Message); }
+            }
             // Also protects the same user's data across distinct Windows/RDP sessions.
             stateLock = new FileStream(Path.Combine(directory, "instance.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             var client = new AppServerClient();

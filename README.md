@@ -1,53 +1,51 @@
 # Codex AutoResume
 
-[![CI](https://img.shields.io/github/actions/workflow/status/arnav42069/codexautoresume/windows.yml?branch=main&label=CI&logo=github)](https://github.com/arnav42069/codexautoresume/actions/workflows/windows.yml)
+[![Windows CI](https://img.shields.io/github/actions/workflow/status/arnav42069/codexautoresume/windows.yml?branch=main&label=Windows&logo=github)](https://github.com/arnav42069/codexautoresume/actions/workflows/windows.yml)
+[![Linux and macOS CI](https://img.shields.io/github/actions/workflow/status/arnav42069/codexautoresume/platforms.yml?branch=main&label=Linux%20%26%20macOS&logo=github)](https://github.com/arnav42069/codexautoresume/actions/workflows/platforms.yml)
 [![Version](https://img.shields.io/github/v/release/arnav42069/codexautoresume?label=version)](https://github.com/arnav42069/codexautoresume/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/arnav42069/codexautoresume)](LICENSE)
-[![Platform: Windows x64](https://img.shields.io/badge/platform-Windows%20x64-0078D4)](#install)
+[![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-0078D4)](#install)
 
-A Windows tray app that resumes interrupted Codex work when usage is available again.
+A desktop app that resumes interrupted Codex work when usage is available again.
 
 - Queue up to five existing conversations.
 - Set priorities or run independent repositories in parallel.
 - See live status, elapsed time and reset countdowns.
 - Keep your queue across restarts. Review uncertain attempts before retrying.
 
-Completed work stays completed. Turning **OFF** stops future continuations without interrupting an active turn.
+Completed work stays completed. Switching **OFF** stops future continuations while active work finishes.
 
-> **Desktop compatibility is still being verified.** Run the [continuity check](docs/DESKTOP-FEASIBILITY.md) against your original Desktop UUIDs first. Desktop must stay closed while AutoResume owns those sessions. The app uses its own Codex app-server, creates no replacement conversations, and cannot guarantee Desktop UI updates.
+> Close Codex Desktop while AutoResume owns its sessions. Check your original UUIDs with the [continuity diagnostic](docs/DESKTOP-FEASIBILITY.md) first. AutoResume uses its own app-server, creates no replacement conversations, and cannot guarantee Desktop UI updates.
 
 ## Install
 
-You need Windows 10/11, the native Codex CLI and Git. Sign in to Codex first.
+Install the Codex CLI and Git, then sign in to Codex.
 
-With Node.js 20.19+ on Windows x64:
+With Node.js 20.19+:
 
-```powershell
+```sh
 npm install -g --foreground-scripts https://github.com/arnav42069/codexautoresume/archive/refs/heads/main.tar.gz
-codexautoresume
 ```
 
-This downloads the Windows release and checks its SHA-256 hash. No .NET installation needed.
-Prefer a ZIP? Download it from [Releases](https://github.com/arnav42069/codexautoresume/releases), extract it and open `CodexAutoResume.exe`.
+Open **Codex AutoResume** from your new desktop shortcut, or run `codexautoresume`.
+The installer checks the release checksum. .NET is included.
 
-To uninstall, close the tray app and run `npm uninstall -g codexautoresume`. Your settings stay saved.
+Prefer a ZIP? Get your platform from [Releases](https://github.com/arnav42069/codexautoresume/releases/latest), extract it somewhere permanent and open the app. First launch creates the shortcut too.
 
-## Run
+Windows x64 · Linux x64/ARM64 with X11 or XWayland · macOS 12+ on Intel or Apple Silicon.
 
-Codex is detected automatically, including npm installs. Close Desktop, confirm exclusive ownership and connect. Add your verified sessions, set priorities, then switch **ON**.
+Codex is detected automatically. Close other Codex clients, confirm ownership, connect and add your verified sessions.
 
-Closing the window keeps it running in the tray.
-
-[npm commands and uninstall](docs/NPM-INSTALL.md)
+On Windows, closing the window keeps it in the tray. On Linux, minimize to keep it running; closing exits once work is settled. macOS also has a menu-bar icon.
 
 ## Build
 
-On Windows with the .NET 8.0.426 SDK:
+With the .NET 8.0.426 SDK:
 
 ```powershell
 ./scripts/build.ps1
 ```
 
-This runs the tests and creates `artifacts/CodexAutoResume-win-x64.zip`. The built app includes .NET.
+On Linux or macOS, use `bash scripts/build-desktop.sh linux-x64` or your matching `linux-arm64`, `osx-x64`, or `osx-arm64` runtime.
 
-[Usage](docs/USAGE.md) · [Integration](docs/INTEGRATION.md) · [Validation](docs/VALIDATION.md)
+[npm commands](docs/NPM-INSTALL.md) · [Usage](docs/USAGE.md) · [Integration](docs/INTEGRATION.md) · [Validation](docs/VALIDATION.md)

@@ -185,6 +185,11 @@ public partial class MainWindow : Window
         await scheduler.SaveSettingsAsync(enabled);
     });
     private void HideClick(object sender, RoutedEventArgs e) => Hide();
+    private async void ShortcutClick(object sender, RoutedEventArgs e) => await Run(() =>
+    {
+        Connection.Text = DesktopIntegration.CreateShortcut(Environment.ProcessPath!, force: true);
+        return Task.CompletedTask;
+    });
     private void OnClosing(object? sender, CancelEventArgs e) { if (!exiting) { e.Cancel = true; Hide(); } }
     private void OnWindowStateChanged(object? sender, EventArgs e) { if (WindowState == WindowState.Minimized) Hide(); }
     private void Restore() { Show(); WindowState = WindowState.Normal; Activate(); }

@@ -7,7 +7,8 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
-const { createInstaller, sha256, downloadRelease } = require('../../launcher/installer.cjs');
+const { createInstaller, sha256, downloadRelease, assertExecutable, extractPortable } = require('../../launcher/installer.cjs');
+const { zipSync } = require('fflate');
 
 function executable(subsystem = 2) {
   const bytes = Buffer.alloc(512);
@@ -16,6 +17,58 @@ function executable(subsystem = 2) {
   return bytes;
 }
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+
+function unixExecutable(platform, arch) {
+  const bytes = Buffer.alloc(128);
+  if (platform === 'linux') {
+    bytes.set([0x7f,0x45,0x4c,0x46,2,1]); bytes.writeUInt16LE(arch === 'arm64' ? 183 : 62,18);
+  } else { bytes.set([0xcf,0xfa,0xed,0xfe]); bytes.writeUInt32LE(arch === 'arm64' ? 0x100000c : 0x1000007,4); }
+  return bytes;
+}
+
+for (const platform of ['linux','darwin']) for (const arch of ['x64','arm64']) {
+  test(`${platform}-${arch} validates native formats and rejects the other architecture`, t => {
+    const folder=fs.mkdtempSync(path.join(os.tmpdir(),'native format-'));
+    t.after(()=>fs.rmSync(folder,{recursive:true,force:true}));
+    const file=path.join(folder,'app');fs.writeFileSync(file,unixExecutable(platform,arch));
+    assertExecutable(file,undefined,platform,arch);
+    assert.throws(()=>assertExecutable(file,undefined,platform,arch==='x64'?'arm64':'x64'),/architecture/);
+  });
+}
+
+for (const name of ['../outside','/absolute','C:/outside','bundle/../../outside','bundle\\outside']) {
+  test(`portable ZIP extraction rejects unsafe entry ${name}`,t=>{
+    const folder=fs.mkdtempSync(path.join(os.tmpdir(),'zip paths-'));
+    t.after(()=>fs.rmSync(folder,{recursive:true,force:true}));
+    const file=path.join(folder,'test.zip');fs.writeFileSync(file,zipSync({[name]:Buffer.from('unsafe')}));
+    assert.throws(()=>extractPortable(file,path.join(folder,'native')),/Unsafe ZIP path|escapes/);
+    assert.ok(!fs.existsSync(path.join(folder,'native')));
+  });
+}
+
+test('Linux installation extracts verified files, sets executable permissions and creates its shortcut',async t=>{
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'linux install & test-'));
+  t.after(()=>fs.rmSync(folder,{recursive:true,force:true}));
+  const archive=zipSync({'CodexAutoResume':unixExecutable('linux','x64'),'docs/readme.txt':Buffer.from('guide')});
+  let shortcuts=0;
+  const metadata={version:'0.2.0',baseUrl:'https://github.com/owner/repo/releases/download/v0.2.0/',platforms:{'linux-x64':{
+    app:{asset:'linux.zip',sha256:digest(archive),executable:'CodexAutoResume',desktopShortcut:true}}}};
+  const installer=createInstaller({root:folder,platform:'linux',arch:'x64',metadata,log(){},
+    download(url,file){fs.writeFileSync(file,archive);},runShortcut(executable,force){
+      assert.equal(force,false);assert.ok(fs.existsSync(executable));shortcuts++;return {status:0};
+    }});
+  const file=await installer.install();assert.equal(shortcuts,1);
+  if(process.platform!=='win32')assert.equal(fs.statSync(file).mode&0o777,0o755);
+  assert.equal(fs.readFileSync(path.join(folder,'app-0.2.0/docs/readme.txt'),'utf8'),'guide');
+  assert.equal(installer.getInstalled(),file);
+});
+
+test('a failed shortcut leaves the verified installed app usable',async t=>{
+  const {installer,metadata}=fixture(t,{runShortcut(){return {status:1};}});
+  metadata.app.desktopShortcut=true;
+  const file=await installer.install();assert.equal(installer.getInstalled(),file);
+  assert.throws(()=>installer.createShortcut(true),/desktop shortcut/);
+});
 
 test('downloads reject unexpected hosts, credentials and plain HTTP before starting a process', () => {
   for (const url of ['http://github.com/release.zip', 'https://example.com/release.zip', 'https://user:password@github.com/release.zip']) {
@@ -53,8 +106,10 @@ function fixture(t, overrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'autoresume npm & test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const archive = Buffer.from('verified fixture archive');
-  const metadata = structuredClone(require('../../launcher/release.json'));
-  metadata.version = '0.1.0'; // Stable fixture, independent of the production release pin.
+  const production = structuredClone(require('../../launcher/release.json'));
+  const windows = production.platforms?.['win32-x64'] || production;
+  const metadata = { version: '0.1.0', baseUrl: production.baseUrl,
+    app: { ...windows.app, desktopShortcut: false }, probe: { ...windows.probe } };
   metadata.app.sha256 = metadata.probe.sha256 = digest(archive);
   const calls = [];
   const installer = createInstaller({ root, platform: 'win32', arch: 'x64', metadata, log() {},
@@ -70,13 +125,13 @@ function fixture(t, overrides = {}) {
 
 test('unsupported operating systems stop before touching disk or downloading', async t => {
   const { installer, root, calls } = fixture(t, { platform: 'linux' });
-  await assert.rejects(installer.install(), /Windows x64 only/);
+  await assert.rejects(installer.install(), /No release is available/);
   assert.deepEqual(calls, []); assert.deepEqual(fs.readdirSync(root), []);
 });
 
 test('unsupported architecture stops before downloading', async t => {
   const { installer, calls } = fixture(t, { arch: 'arm64' });
-  await assert.rejects(installer.install(), /Windows x64 only/); assert.deepEqual(calls, []);
+  await assert.rejects(installer.install(), /No release is available/); assert.deepEqual(calls, []);
 });
 
 test('verified archive installs atomically and the cached executable is reused', async t => {

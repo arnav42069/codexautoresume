@@ -42,8 +42,8 @@ Test("find native Codex in the current nested npm Windows layout", () =>
     {
         add(["codex.cmd"]);
         var executable = add(["node_modules", "@openai", "codex", "node_modules", "@openai", "codex-win32-x64", "vendor", "x86_64-pc-windows-msvc", "bin", "codex.exe"]);
-        Equal(executable, CodexExecutableResolver.Find("codex.exe", [root]));
-        Equal(executable, CodexExecutableResolver.Find(Path.Combine(root, "codex.cmd"), []));
+        Equal(executable, CodexExecutableResolver.Find("codex.exe", [root], platform: "win32"));
+        Equal(executable, CodexExecutableResolver.Find(Path.Combine(root, "codex.cmd"), [], platform: "win32"));
     });
     return Task.CompletedTask;
 });
@@ -52,7 +52,7 @@ Test("find native Codex in the bundled npm vendor layout", () =>
     WithCodexInstallation((root, add) =>
     {
         var executable = add(["node_modules", "@openai", "codex", "vendor", "x86_64-pc-windows-msvc", "codex", "codex.exe"]);
-        Equal(executable, CodexExecutableResolver.Find("codex", [root]));
+        Equal(executable, CodexExecutableResolver.Find("codex", [root], platform: "win32"));
     });
     return Task.CompletedTask;
 });
@@ -61,7 +61,7 @@ Test("find native Codex in a hoisted optional npm package", () =>
     WithCodexInstallation((root, add) =>
     {
         var executable = add(["node_modules", "@openai", "codex-win32-x64", "vendor", "x86_64-pc-windows-msvc", "codex", "codex.exe"]);
-        Equal(executable, CodexExecutableResolver.Find(null, [root]));
+        Equal(executable, CodexExecutableResolver.Find(null, [root], platform: "win32"));
     });
     return Task.CompletedTask;
 });
@@ -70,8 +70,8 @@ Test("native Codex on PATH takes precedence and quoted paths with spaces work", 
     WithCodexInstallation((root, add) =>
     {
         var first = add(["first", "codex.exe"]); add(["second", "codex.exe"]);
-        Equal(first, CodexExecutableResolver.Find("codex.exe", ["\"" + Path.Combine(root, "first") + "\"", Path.Combine(root, "second")]));
-        Equal(first, CodexExecutableResolver.Find("\"" + first + "\"", []));
+        Equal(first, CodexExecutableResolver.Find("codex.exe", ["\"" + Path.Combine(root, "first") + "\"", Path.Combine(root, "second")], platform: "win32"));
+        Equal(first, CodexExecutableResolver.Find("\"" + first + "\"", [], platform: "win32"));
     });
     return Task.CompletedTask;
 });
@@ -80,7 +80,7 @@ Test("missing explicit Codex executable never silently switches installations", 
     WithCodexInstallation((root, add) =>
     {
         add(["codex.exe"]);
-        Equal<string?>(null, CodexExecutableResolver.Find(Path.Combine(root, "missing", "codex.exe"), [root]));
+        Equal<string?>(null, CodexExecutableResolver.Find(Path.Combine(root, "missing", "codex.exe"), [root], platform: "win32"));
     });
     return Task.CompletedTask;
 });
@@ -89,8 +89,8 @@ Test("a shell shim alone is never returned as the native executable", () =>
     WithCodexInstallation((root, add) =>
     {
         var shim = add(["codex.cmd"]); add(["codex.ps1"]); add(["codex"]);
-        Equal<string?>(null, CodexExecutableResolver.Find("codex", [root]));
-        Equal<string?>(null, CodexExecutableResolver.Find(shim, []));
+        Equal<string?>(null, CodexExecutableResolver.Find("codex", [root], platform: "win32"));
+        Equal<string?>(null, CodexExecutableResolver.Find(shim, [], platform: "win32"));
     });
     return Task.CompletedTask;
 });
@@ -100,7 +100,7 @@ Test("automatic discovery skips Desktop WindowsApps aliases", () =>
     {
         add(["WindowsApps", "codex.exe"]);
         var native = add(["cli", "codex.exe"]);
-        Equal(native, CodexExecutableResolver.Find("codex", [Path.Combine(root, "WindowsApps"), Path.Combine(root, "cli")]));
+        Equal(native, CodexExecutableResolver.Find("codex", [Path.Combine(root, "WindowsApps"), Path.Combine(root, "cli")], platform: "win32"));
     });
     return Task.CompletedTask;
 });
@@ -112,7 +112,15 @@ Test("automatic discovery respects a custom npm global prefix", () =>
     {
         WithCodexInstallation((root, add) =>
         {
-            var native = add(["node_modules", "@openai", "codex", "vendor", "x86_64-pc-windows-msvc", "bin", "codex.exe"]);
+            var arm = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64;
+            var triple = OperatingSystem.IsWindows() ? "x86_64-pc-windows-msvc" : OperatingSystem.IsMacOS()
+                ? (arm ? "aarch64-apple-darwin" : "x86_64-apple-darwin") : (arm ? "aarch64-unknown-linux-musl" : "x86_64-unknown-linux-musl");
+            var native = add(["node_modules", "@openai", "codex", "vendor", triple, "bin", OperatingSystem.IsWindows() ? "codex.exe" : "codex"]);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.WriteAllBytes(native, OperatingSystem.IsMacOS() ? [0xCF, 0xFA, 0xED, 0xFE] : [0x7F, 0x45, 0x4C, 0x46]);
+                File.SetUnixFileMode(native, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
             Environment.SetEnvironmentVariable("PATH", "");
             Environment.SetEnvironmentVariable("NPM_CONFIG_PREFIX", root);
             Equal(native, CodexExecutableResolver.Resolve("codex.exe"));
@@ -123,6 +131,64 @@ Test("automatic discovery respects a custom npm global prefix", () =>
         Environment.SetEnvironmentVariable("PATH", oldPath);
         Environment.SetEnvironmentVariable("NPM_CONFIG_PREFIX", oldPrefix);
     }
+    return Task.CompletedTask;
+});
+
+if (!OperatingSystem.IsWindows())
+Test("Unix npm shim resolves to its native vendor binary without executing JavaScript", () =>
+{
+    WithCodexInstallation((root, add) =>
+    {
+        var arm = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64;
+        var triple = OperatingSystem.IsMacOS() ? (arm ? "aarch64-apple-darwin" : "x86_64-apple-darwin") : (arm ? "aarch64-unknown-linux-musl" : "x86_64-unknown-linux-musl");
+        var script = add(["node_modules", "@openai", "codex", "bin", "codex.js"]);
+        File.CreateSymbolicLink(Path.Combine(root, "codex"), script);
+        var native = add(["node_modules", "@openai", "codex", "vendor", triple, "codex", "codex"]);
+        File.WriteAllBytes(native, OperatingSystem.IsMacOS() ? [0xCF, 0xFA, 0xED, 0xFE] : [0x7F, 0x45, 0x4C, 0x46]);
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(native, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        Equal(native, CodexExecutableResolver.Find("codex", [root]));
+    });
+    return Task.CompletedTask;
+});
+
+Test("desktop shortcut is created once and repaired only on explicit request", () =>
+{
+    var oldData = Environment.GetEnvironmentVariable("AUTORESUME_DATA_HOME");
+    var oldDesktop = Environment.GetEnvironmentVariable("AUTORESUME_DESKTOP_DIR");
+    var oldXdgData = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+    try
+    {
+        WithCodexInstallation((root, add) =>
+        {
+            Environment.SetEnvironmentVariable("AUTORESUME_DATA_HOME", Path.Combine(root, "state"));
+            Environment.SetEnvironmentVariable("AUTORESUME_DESKTOP_DIR", Path.Combine(root, "Desktop"));
+            Environment.SetEnvironmentVariable("XDG_DATA_HOME", Path.Combine(root, "data"));
+            var exe = add(OperatingSystem.IsMacOS() ? ["CodexAutoResume.app", "Contents", "MacOS", "CodexAutoResume"] : ["CodexAutoResume.exe"]);
+            var shortcut = DesktopIntegration.CreateShortcut(exe);
+            True(File.Exists(shortcut) || Directory.Exists(shortcut));
+            if (OperatingSystem.IsMacOS()) Directory.Delete(shortcut); else File.Delete(shortcut);
+            DesktopIntegration.CreateShortcut(exe);
+            True(!File.Exists(shortcut) && !Directory.Exists(shortcut));
+            Equal(shortcut, DesktopIntegration.CreateShortcut(exe, force: true));
+            True(File.Exists(shortcut) || Directory.Exists(shortcut));
+        });
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("AUTORESUME_DATA_HOME", oldData);
+        Environment.SetEnvironmentVariable("AUTORESUME_DESKTOP_DIR", oldDesktop);
+        Environment.SetEnvironmentVariable("XDG_DATA_HOME", oldXdgData);
+    }
+    return Task.CompletedTask;
+});
+
+Test("Linux desktop entries quote executable paths and preserve percent field codes", () =>
+{
+    var entry = DesktopIntegration.DesktopEntry("/home/a user/50% tools/codexautoresume");
+    True(entry.Contains("Exec=\"/home/a user/50%% tools/codexautoresume\""));
+    True(entry.Contains("Terminal=false")); True(entry.Contains("X-CodexAutoResume=true"));
+    try { DesktopIntegration.DesktopEntry("/bad\nInjected=command"); throw new Exception("Unsafe path accepted"); }
+    catch (ArgumentException) { }
     return Task.CompletedTask;
 });
 

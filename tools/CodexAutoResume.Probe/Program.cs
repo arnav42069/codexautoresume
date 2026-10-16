@@ -20,14 +20,13 @@ try
                 ids.Add(id.ToString()); break;
         }
     }
-    if (!OperatingSystem.IsWindows()) throw new InvalidOperationException("Desktop feasibility must be checked on the target Windows machine containing its session history.");
     if (!confirmedClosed || ids.Count is < 1 or > 5 || ids.Distinct().Count() != ids.Count)
         throw new ArgumentException("Finish/resolve active Desktop work, close Desktop and AutoResume, then pass --desktop-closed and one to five distinct Desktop UUIDs.");
 }
 catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException or InvalidOperationException)
 {
     Console.Error.WriteLine(ex.Message);
-    Console.Error.WriteLine("Usage: CodexAutoResume.Probe.exe --codex C:\\path\\codex.exe --desktop-closed UUID [UUID...] [--output desktop-continuity.json]");
+    Console.Error.WriteLine("Usage: CodexAutoResume.Probe[.exe] --desktop-closed UUID [UUID...] [--codex PATH] [--output desktop-continuity.json]");
     return 2;
 }
 

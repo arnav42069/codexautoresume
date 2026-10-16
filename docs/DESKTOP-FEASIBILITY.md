@@ -2,9 +2,9 @@
 
 ## Current conclusion
 
-**Not yet verified for the user's Windows Desktop conversations.** The installed app-server protocol supports loading an existing stored UUID with recorded history. That is conditional protocol support, not proof that any particular Desktop conversation is stored in a compatible home/backend or that another process is idle.
+**Not yet verified for the user's original Desktop conversations.** The installed app-server protocol supports loading an existing stored UUID with recorded history. That is conditional protocol support, not proof that any particular Desktop conversation is stored in a compatible home/backend or that another process is idle.
 
-This investigation runs on Linux with codex-cli 0.159.2. Windows Desktop and its session store are not available here. Generic mock tests, a successful app-server handshake, and an empty discovery result do not pass the Desktop feasibility gate. The previously built Windows app must remain OFF for these sessions until target-machine validation succeeds. No separate replacement-session implementation is being substituted.
+This investigation runs on Linux with codex-cli 0.159.2. Windows Desktop and its session store are not available here. Generic mock tests, a successful app-server handshake, and an empty discovery result do not pass the Desktop feasibility gate. The app must remain OFF for these sessions until target-machine validation succeeds. No separate replacement-session implementation is being substituted.
 
 The installed generated `ThreadResumeParams` description states:
 
@@ -12,11 +12,11 @@ The installed generated `ThreadResumeParams` description states:
 
 It also describes history/path overrides that can take precedence over the requested identity. The diagnostic and application use **only `threadId`** for identity, without history/path overrides. `thread/resume` is distinct from `thread/start` and `thread/fork`; the client contains no create/fork fallback. A missing UUID or mismatched response is a failure.
 
-## Check the real Windows sessions without sending a prompt
+## Check the original sessions on their machine without sending a prompt
 
 1. Let active Desktop work finish, or resolve it manually in Desktop. Record the original UUID(s) of one to five intended Desktop conversations. Do not create test replacements and do not use `--last`.
 2. Close Desktop, AutoResume, and other Codex clients completely. Keep them closed throughout the diagnostic. Closing a window must not leave its process/background work running. Do not terminate active work just to make this check pass.
-3. Use the native `codex.exe` and existing authentication/configuration/home that can access those conversations. The tool does not copy credentials, edit configuration, inspect private Desktop databases, or override `CODEX_HOME`. If the selected CLI cannot access that history, the check fails rather than trying another identity or making a new thread.
+3. Use the native Codex CLI (`codex.exe` on Windows, `codex` on Linux/macOS) and existing authentication/configuration/home that can access those conversations. The tool does not copy credentials, edit configuration, inspect private Desktop databases, or override `CODEX_HOME`. If the selected CLI cannot access that history, the check fails rather than trying another identity or making a new thread.
 4. Extract the self-contained Windows diagnostic and run in PowerShell, replacing the executable path and UUIDs:
 
 ```powershell
@@ -31,7 +31,7 @@ The source can also run with the .NET 8 SDK:
 dotnet run --project tools/CodexAutoResume.Probe -c Release -- --codex C:\path\to\codex.exe --desktop-closed ORIGINAL-DESKTOP-UUID --output desktop-continuity.json
 ```
 
-The diagnostic is intentionally Windows-only at its entry point. Its portable core is tested using subprocess fixtures; fixture success is not reported as real Desktop success.
+Version 0.2 provides a matching diagnostic for every supported platform. On Linux/macOS, run `./CodexAutoResume.Probe --desktop-closed ORIGINAL-DESKTOP-UUID`, or use `codexautoresume verify ORIGINAL-DESKTOP-UUID --desktop-closed` on any platform. Native CLI detection is automatic; `--codex` is an optional override. Subprocess fixture success is not reported as real Desktop success.
 
 To reproduce the self-contained diagnostic from source (Windows or Linux with the .NET 8 SDK):
 
@@ -67,4 +67,4 @@ The best-effort process check is an extra guard. It cannot guarantee safety agai
 
 ## Next decision
 
-Return the diagnostic report from the Windows machine. If the intended UUIDs and recorded history are preserved and exclusive handoff is acceptable, the existing queue/status/journal implementation can be validated against those exact sessions. If access, identity or history fails, report that limitation and stop; do not implement or silently substitute independent conversations. The earlier generic test results alone are not sufficient to proceed.
+Return the diagnostic report from the machine containing the original history. If the intended UUIDs and recorded history are preserved and exclusive handoff is acceptable, the existing queue/status/journal implementation can be validated against those exact sessions. If access, identity or history fails, report that limitation and stop; do not implement or silently substitute independent conversations. The earlier generic test results alone are not sufficient to proceed.

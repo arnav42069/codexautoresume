@@ -1,29 +1,36 @@
 # Install with npm
 
-On Windows x64, install Node.js 20.19 or later and Git, then run:
+On Windows x64, Linux x64/ARM64, or macOS Intel/Apple Silicon, install Node.js 20.19 or later and Git, then run:
 
 ```powershell
 npm install -g --foreground-scripts https://github.com/arnav42069/codexautoresume/archive/refs/heads/main.tar.gz
-codexautoresume
 ```
 
 Use the full source-archive URL. This package is not published on the npm registry.
-The installer downloads the pinned Windows release, checks its SHA-256 hash and
-extracts it inside the npm package. It does not start the app or submit Codex work.
+The installer downloads your platform's pinned release, checks its SHA-256 hash and
+extracts it inside the npm package. It creates a desktop shortcut without opening
+the UI or submitting Codex work. Open that shortcut or run `codexautoresume`.
 The release includes .NET. The native Codex CLI and a signed-in account are still required.
 
-Close the app from its tray menu before reinstalling or updating. Run the same
+Exit the app before reinstalling or updating. On Windows, use the tray menu. Run the same
 install command to get the latest installer from `main`; each installer pins a
 specific release rather than trusting a moving download URL.
 
 ```powershell
 codexautoresume --version
 codexautoresume --help
+codexautoresume shortcut
 npm uninstall -g codexautoresume
 ```
 
-Uninstall removes the downloaded program. Your settings stay in
-`%LOCALAPPDATA%\CodexAutoResume`.
+Uninstall removes the downloaded program; delete its desktop shortcut afterward.
+Settings stay in `%LOCALAPPDATA%\CodexAutoResume` on Windows,
+`~/.local/state/codexautoresume` on Linux (or `XDG_STATE_HOME`), and
+`~/Library/Application Support/CodexAutoResume` on macOS.
+
+Shortcuts are created during installation and first launch. If you delete one,
+it stays deleted until you run `codexautoresume shortcut` or use the app’s shortcut button.
+Linux also gets an application-menu entry. Some desktops require **Allow Launching**.
 
 ## Desktop conversations
 
@@ -31,7 +38,7 @@ Follow the [continuity check](DESKTOP-FEASIBILITY.md) before scheduling existing
 Desktop UUIDs. The optional diagnostic downloads only when requested:
 
 ```powershell
-codexautoresume verify YOUR-UUID --desktop-closed --codex "C:\path\codex.exe"
+codexautoresume verify YOUR-UUID --desktop-closed
 ```
 
 Keep Desktop closed while AutoResume owns those sessions. Backend execution does
@@ -39,8 +46,7 @@ not guarantee updates in the Desktop UI. The installer does not change this limi
 
 ## If installation stops
 
-The installer uses Windows curl to show download progress; Windows PowerShell
-extracts the verified ZIP. It needs HTTPS access to GitHub Releases. A
+The installer uses curl to show download progress and needs HTTPS access to GitHub Releases. A
 failed download or checksum check stops installation; it never runs an unverified
 download. Connections time out after 20 seconds; a stalled transfer stops after
 45 seconds, and the whole download has a five-minute limit. If your connection

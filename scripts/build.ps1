@@ -15,6 +15,7 @@ try {
         if ($process.ExitCode -ne 0) { throw "Windows UI startup check failed: $($process.ExitCode)" }
     }
     Copy-Item README.md, LICENSE -Destination "artifacts/$Runtime"
+    '@echo off', '"%~dp0CodexAutoResume.exe" --create-shortcut' | Set-Content "artifacts/$Runtime/Create desktop shortcut.cmd" -Encoding ascii
     New-Item -ItemType Directory -Path "artifacts/$Runtime/docs" -Force | Out-Null
     Copy-Item docs/* -Destination "artifacts/$Runtime/docs"
     Compress-Archive -Path "artifacts/$Runtime/*" -DestinationPath "artifacts/CodexAutoResume-$Runtime.zip" -Force

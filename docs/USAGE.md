@@ -1,16 +1,16 @@
 # Using Codex AutoResume
 
-A compact .NET 8 / WPF Windows tray utility for continuing up to five interrupted Codex sessions, with a durable priority queue and live conversation status.
+A compact .NET 8 desktop utility for Windows, Linux and macOS for continuing up to five interrupted Codex sessions, with a durable priority queue and live conversation status.
 
 **Desktop integration limit:** this utility controls an app-server it starts. It does **not** control the standalone Codex Desktop application, attach to its private server, or promise that resumed sessions appear updated in Desktop. Shared local history is not a cross-process execution lock. Close Desktop and all other Codex clients, confirm exclusive ownership, and keep them closed while AutoResume owns a session. Direct Desktop control remains unsupported. See [integration findings and architecture](INTEGRATION.md).
 
-**Existing Desktop conversation feasibility is still pending.** The earlier build and generic app-server tests did not establish that your Windows Desktop UUIDs and context are accessible. Keep scheduling OFF for those sessions until the [existing-conversation diagnostic](DESKTOP-FEASIBILITY.md) passes on their Windows machine. It only resumes the supplied existing UUID to inspect history; it never starts a model turn or creates/forks a replacement thread.
+**Existing Desktop conversation feasibility is still pending.** The earlier build and generic app-server tests did not establish that your Windows Desktop UUIDs and context are accessible. Keep scheduling OFF for those sessions until the [existing-conversation diagnostic](DESKTOP-FEASIBILITY.md) passes on the machine containing their history. It only resumes the supplied existing UUID to inspect history; it never starts a model turn or creates/forks a replacement thread.
 
 ## Install and run
 
-1. On Windows 10/11 x64, extract `CodexAutoResume-win-x64.zip` or copy the published `CodexAutoResume.exe` to a stable user location. The executable is self-contained; .NET does not need to be installed. This build is unsigned. The native runtime extracts to the user's temporary directory on first launch.
-2. Install the native Windows Codex CLI and Git for Windows. Protocol validation used **codex-cli 0.159.2**; older versions may lack required fields and fail closed. Sign in through Codex's normal supported flow. AutoResume never reads or stores authentication files or keys.
-3. Launch AutoResume. It finds the native CLI automatically, including npm installs whose PATH entry is `codex.cmd`. Use **Find Codex** to search again or **Browse** for a custom installation. Close Desktop and other Codex clients, confirm exclusive ownership, then connect. The server inherits your existing environment and Codex configuration, including `CODEX_HOME` when set.
+1. Extract your platform ZIP into a stable user location. Open `CodexAutoResume.exe` on Windows, `CodexAutoResume` on Linux, or `CodexAutoResume.app` on macOS. First launch creates a desktop shortcut. The executable is self-contained; .NET does not need to be installed. This build is unsigned. The native runtime extracts to the user's temporary directory on first launch.
+2. Install the native Codex CLI and Git. Protocol validation used **codex-cli 0.159.2**; older versions may lack required fields and fail closed. Sign in through Codex's normal supported flow. AutoResume never reads or stores authentication files or keys.
+3. Launch AutoResume. It finds the native CLI automatically, including npm installs and Unix symlinks. Use **Find Codex** to search again or **Browse** for a custom installation. Close Desktop and other Codex clients, confirm exclusive ownership, then connect. The server inherits your existing environment and Codex configuration, including `CODEX_HOME` when set.
 4. Confirm exclusive ownership and click **Connect**. This starts `codex app-server --listen stdio://`, initializes the protocol, and revalidates saved sessions. No continuation is sent during connection.
 5. Click **+ Add conversation**. Select a session returned by `thread/list` or enter its exact UUID. Confirm the title, UUID and workspace. Only sessions accessible to that Codex installation/account/home are discoverable. Sessions require an existing local Git workspace without symlinks or junctions. Identity mismatches, changed workspaces and missing repositories block execution.
 6. Arrange priority with ↑ / ↓. **☆ Sequential** uses the single sequential lane; **★ Parallel** permits concurrent execution in independent repositories. Conflicting repositories, including worktrees sharing a Git common directory, and nested workspaces are serialized. An active execution's lane cannot change.
@@ -84,3 +84,11 @@ dotnet run --project tests/CodexAutoResume.Tests -c Release -- --live-smoke C:\p
 ## Validation boundary
 
 This development host is Linux. Core/transport tests, read-only app-server initialization/discovery, compilation and Windows cross-publication are checked here. WPF rendering, tray behavior, Windows startup, authenticated resumptions, real resets and Desktop visibility require Windows/user-account validation and are not claimed to work based on these checks. No real continuation prompts were submitted. See [Windows acceptance checks](WINDOWS-VALIDATION.md).
+
+## Platform behavior
+
+Windows retains its WPF tray interface. Linux and macOS use a native Avalonia interface with the same scheduler, queue journal, status presentation and exact-UUID safeguards. Linux needs X11 or XWayland. Minimize the Linux window to keep it running; closing it exits only after active/uncertain work is settled. macOS has a menu-bar icon and an explicit hide action.
+
+Use **Desktop shortcut** or `codexautoresume shortcut` to repair an icon. Deleting a shortcut keeps it deleted for the same installation. npm uninstall leaves user settings and desktop icons; remove the icon manually. Start at login is optional and uses the Windows Run key, XDG autostart, or a macOS LaunchAgent.
+
+For isolated tests, `AUTORESUME_DATA_HOME` and `AUTORESUME_DESKTOP_DIR` can point to temporary directories. These do not change Codex authentication or its history home.

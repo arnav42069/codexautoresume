@@ -8,7 +8,8 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>CodexAutoResume</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.1.1</Version>
+    <ApplicationIcon>../../assets/icon.ico</ApplicationIcon>
+    <Version>0.2.0</Version>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../CodexAutoResume.Core/CodexAutoResume.Core.csproj" /></ItemGroup>
 </Project>

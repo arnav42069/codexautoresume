@@ -1,8 +1,6 @@
 using System.ComponentModel;
-using System.Windows.Media;
-using CodexAutoResume.Core;
 
-namespace CodexAutoResume.Windows;
+namespace CodexAutoResume.Core;
 
 public sealed class ConversationView : INotifyPropertyChanged
 {
