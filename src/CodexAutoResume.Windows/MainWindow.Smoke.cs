@@ -47,11 +47,13 @@ public partial class MainWindow
                 Environment.SetEnvironmentVariable("PATH", fixtureDirectory + Path.PathSeparator + oldPath);
                 SetExecutable("codex.exe"); await FindCodexAsync(showMissing: false);
                 Assert(DetectedVersion.Text.StartsWith("codex-cli"), "Automatic startup discovery did not validate the CLI.");
-                Exclusive.IsChecked = true; await ConnectAsync();
+                Exclusive.IsChecked = false; await ConnectAsync();
                 Assert(scheduler.IsConnected && client.ProcessId != null, ConnectionError.Text.Length > 0 ? ConnectionError.Text : "Discovered CLI did not connect.");
                 Assert((await scheduler.DiscoverAsync()).Count == 1, "Owned test app-server discovery failed.");
                 Assert(!state.Enabled && WatcherHeading.Text.Contains("OFF"), "Connecting must not silently turn scheduling ON.");
+                Assert(!scheduler.HasExecutionOwnership && state.Conversations.All(c => c.ObservationOnly && !c.Armed), "Read-only connection armed work or acquired ownership.");
                 await Capture("04-connected-off");
+                Exclusive.IsChecked = true; await scheduler.AcquireExecutionOwnershipAsync(true);
             }
             finally { Environment.SetEnvironmentVariable("PATH", oldPath); }
         }

@@ -26,7 +26,7 @@
    <StackPanel><TextBlock Text="COMPLETED" Style="{StaticResource Caption}"/><TextBlock x:Name="CompletedCount" Text="0" FontSize="26" FontFamily="Consolas" Foreground="{DynamicResource Success}"/></StackPanel>
   </UniformGrid>
   <DockPanel Margin="0,0,0,6"><Button x:Name="AddButton" DockPanel.Dock="Right" Content="+ _Add conversation" Click="AddClick"/><StackPanel><TextBlock Text="02 / PRIORITY QUEUE" Style="{StaticResource Caption}"/><TextBlock x:Name="Summary" Foreground="{DynamicResource Secondary}" FontSize="11"/></StackPanel></DockPanel>
-  <Border x:Name="EmptyPanel" Style="{StaticResource Panel}"><StackPanel><TextBlock Text="Keep your work moving." FontSize="17" FontWeight="SemiBold"/><TextBlock x:Name="Empty" Margin="0,6,0,0" Foreground="{DynamicResource Secondary}" Text="Connect, then select up to five existing conversations. Completed work stays completed until you explicitly rearm it."/></StackPanel></Border>
+  <Border x:Name="EmptyPanel" Style="{StaticResource Panel}"><StackPanel><TextBlock Text="Keep your work moving." FontSize="17" FontWeight="SemiBold"/><TextBlock x:Name="Empty" Margin="0,6,0,0" Foreground="{DynamicResource Secondary}" Text="Your five most recent chats appear automatically when the queue is empty. Existing priorities stay fixed. Desktop may remain open while browsing."/></StackPanel></Border>
   <ItemsControl x:Name="Cards"><ItemsControl.ItemTemplate><DataTemplate>
    <Border Style="{StaticResource Panel}"><StackPanel>
     <DockPanel>
@@ -54,12 +54,13 @@
    </StackPanel></Border>
   </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
   <Border Style="{StaticResource Panel}"><Expander x:Name="ConnectionSettings" Header="03 / CONNECTION &amp; SETTINGS" IsExpanded="True"><StackPanel Margin="0,12,0,0">
-   <TextBlock Text="Codex Desktop control and UI synchronization are unsupported. Finish active work and close Desktop and other Codex clients before connecting." Foreground="{DynamicResource Attention}"/>
+   <TextBlock Text="Desktop may stay open for connection and chat discovery. Desktop UI synchronization is unsupported. Close other clients only when handing over execution ownership." Foreground="{DynamicResource Attention}"/>
    <TextBlock Text="Native Codex executable · resolved path" Style="{StaticResource Caption}" Margin="0,12,0,2"/>
    <TextBox x:Name="CodexPath" FontFamily="Consolas" TextChanged="CodexPathChanged" ToolTip="Detected automatically, including npm installs. Browse to override." AutomationProperties.Name="Codex executable path"/>
-   <WrapPanel><Button x:Name="FindButton" Content="_Re-detect" Click="FindCodexClick"/><Button x:Name="BrowseButton" Content="_Browse…" Click="BrowseCodexClick"/><Button x:Name="ConnectButton" Content="_Connect" Click="ConnectClick" BorderBrush="{DynamicResource AccentFocus}"/><TextBlock x:Name="DetectedVersion" VerticalAlignment="Center" Foreground="{DynamicResource AccentText}"/></WrapPanel>
+   <WrapPanel><Button x:Name="FindButton" Content="_Re-detect" Click="FindCodexClick"/><Button x:Name="BrowseButton" Content="_Browse…" Click="BrowseCodexClick"/><Button x:Name="ConnectButton" Content="_Connect read-only" Click="ConnectClick" BorderBrush="{DynamicResource AccentFocus}"/><TextBlock x:Name="DetectedVersion" VerticalAlignment="Center" Foreground="{DynamicResource AccentText}"/></WrapPanel>
    <TextBlock x:Name="Detection" Text="Detecting Codex…" Foreground="{DynamicResource Secondary}" Margin="0,3,0,4"/>
-   <CheckBox x:Name="Exclusive"><TextBlock Text="I grant AutoResume exclusive ownership of the selected sessions. Other clients will remain closed."/></CheckBox>
+   <CheckBox x:Name="Exclusive"><TextBlock Text="For execution: other Codex clients are closed. I grant AutoResume exclusive ownership of these sessions."/></CheckBox>
+   <WrapPanel><Button x:Name="AcquireButton" Content="Acquire execution ownership" Click="AcquireClick"/><Button x:Name="RefreshChatsButton" Content="Refresh chats" Click="RefreshChatsClick"/></WrapPanel>
    <TextBlock x:Name="Connection" Foreground="{DynamicResource Secondary}"/>
    <WrapPanel Margin="0,6,0,0"><CheckBox x:Name="Startup" Content="Start with Windows (tray)" Click="StartupClick"/><CheckBox x:Name="MinimizeTray" Content="Minimize to tray" Click="AppearanceChanged"/><CheckBox x:Name="CloseTray" Content="Close to tray" Click="AppearanceChanged"/></WrapPanel>
    <WrapPanel><Button Content="Desktop shortcut" Click="ShortcutClick"/><Button Content="Hide to tray" Click="HideClick"/><Button Content="Exit" Click="ExitClick"/></WrapPanel>

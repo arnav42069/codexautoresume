@@ -61,7 +61,7 @@ public partial class MainWindow : Window
         clock.Tick += (_, _) => { foreach (var row in rows) row.RefreshClock(); };
         clock.Start(); Render(state);
         if (autoDetect)
-            Loaded += async (_, _) => await FindCodexAsync(showMissing: false);
+            Loaded += async (_, _) => await Run(ConnectAsync);
     }
 
     private void Render(AppState next)
@@ -69,11 +69,15 @@ public partial class MainWindow : Window
         if (exiting) return;
         state = next;
         if (!scheduler.IsConnected && connectionFailure == null) Connection.Text = "Disconnected · connect and revalidate before scheduling";
-        var status = DashboardStatus.From(state, scheduler.IsConnected, connectionFailure);
+        var status = DashboardStatus.From(state, scheduler.IsConnected, connectionFailure, scheduler.HasExecutionOwnership);
         WatcherHeading.Text = status.Heading;
         WatcherHeading.Foreground = SystemParameters.HighContrast ? SystemColors.WindowTextBrush : new SolidColorBrush((Color)ColorConverter.ConvertFromString(status.Health));
         NextAction.Text = status.NextAction;
-        ConnectionBadge.Text = scheduler.IsConnected ? "OWNED APP-SERVER · CONNECTED" : "DISCONNECTED";
+        ConnectionBadge.Text = !scheduler.IsConnected ? "DISCONNECTED" : scheduler.HasExecutionOwnership ? "OWNED EXECUTION · CONNECTED" : "CONNECTED · READ-ONLY";
+        AcquireButton.IsEnabled = scheduler.IsConnected && !scheduler.HasExecutionOwnership;
+        RefreshChatsButton.IsEnabled = scheduler.IsConnected && !scheduler.HasExecutionOwnership;
+        Exclusive.IsEnabled = !scheduler.HasExecutionOwnership;
+        ConnectButton.IsEnabled = !scheduler.IsConnected && client.ProcessId == null;
         ConnectionErrorPanel.Visibility = connectionFailure == null ? Visibility.Collapsed : Visibility.Visible;
         ConnectionError.Text = connectionFailure ?? "";
         AddButton.IsEnabled = scheduler.IsConnected && state.Conversations.Count < 5;
@@ -90,16 +94,16 @@ public partial class MainWindow : Window
             else if (rows.IndexOf(row) != i) rows.Move(rows.IndexOf(row), i);
             row.Update(c, i + 1, queued.IndexOf(c.Id) + 1);
         }
-        int Count(ConversationStatus status) => state.Conversations.Count(c => c.Status == status);
+        int Count(ConversationStatus status) => state.Conversations.Count(c => !c.ObservationOnly && c.Status == status || status == ConversationStatus.Running && c.ObservationOnly && c.ObservedActive);
         Summary.Text = $"{Count(ConversationStatus.Running)} running · {Count(ConversationStatus.Queued)} queued · {Count(ConversationStatus.RateLimited)} rate limited · {Count(ConversationStatus.Completed)} completed";
-        var saved = state.Conversations.Any(c => !c.Revalidated);
+        var saved = state.Conversations.Any(c => !c.ObservationOnly && !c.Revalidated);
         if (saved) Summary.Text = "Last known: " + Summary.Text;
         string Total(ConversationStatus status) => Count(status) + (saved ? " *" : "");
         RunningCount.Text = Total(ConversationStatus.Running); QueuedCount.Text = Total(ConversationStatus.Queued);
         LimitedCount.Text = Total(ConversationStatus.RateLimited); CompletedCount.Text = Total(ConversationStatus.Completed);
         CompletedCount.SetResourceReference(TextBlock.ForegroundProperty, saved ? "Secondary" : "Success");
         var limited = state.Conversations.Where(c => c.WaitingForUsage).ToList();
-        Usage.Text = limited.Count == 0 ? "Usage is checked before scheduling; reset permission is verified with Codex." :
+        Usage.Text = !scheduler.HasExecutionOwnership ? (state.DiscoveryError ?? state.DiscoveryOrder) : limited.Count == 0 ? "Usage is checked before scheduling; reset permission is verified with Codex." :
             limited.Any(c => c.ResetAt == null) ? "Usage limited · some reset estimates unavailable · backoff enabled" :
             $"Usage limited · estimated reset {limited.Max(c => c.ResetAt)!.Value.ToLocalTime():g}";
         var selected = (Activity.SelectedItem as EventRow)?.Message;
@@ -122,19 +126,14 @@ public partial class MainWindow : Window
         SetConnectionControls(false);
         try
         {
-            if (Exclusive.IsChecked != true)
-            {
-                Connection.Text = "Finish active Codex work, close Desktop and other clients, then tick the exclusive ownership checkbox.";
-                return;
-            }
             connectionFailure = null;
-            Connection.Text = "Validating Codex, connecting and revalidating…";
+            Connection.Text = "Validating Codex and connecting read-only…";
             var found = await CodexDiscovery.DiscoverAsync(CodexPath.Text, manualPath);
             SetExecutable(found.Path); DetectedVersion.Text = found.Version;
-            Detection.Text = "Native executable validated. App-server execution requires exclusive ownership.";
+            Detection.Text = "Native executable validated. Browsing does not require closing Desktop.";
             await scheduler.SaveExecutableAsync(found.Path);
-            await scheduler.ConnectAsync(found.Path, exclusiveOwnership: true);
-            Connection.Text = $"Connected · {client.Version} · owned app-server";
+            await scheduler.ConnectForDiscoveryAsync(found.Path);
+            Connection.Text = $"Connected read-only · {client.Version} · Desktop may remain open";
             connectionFailure = null;
         }
         catch (Exception ex)
@@ -156,7 +155,7 @@ public partial class MainWindow : Window
             if (CodexPath.Text != previous) return;
             SetExecutable(found.Path); DetectedVersion.Text = found.Version;
             await scheduler.SaveExecutableAsync(found.Path);
-            Detection.Text = "Detected and version-validated. Close other clients and confirm ownership before connecting.";
+            Detection.Text = "Detected and version-validated. Connect read-only; Desktop may stay open.";
         }
         catch (Exception ex) { DetectedVersion.Text = ""; Detection.Text = ex.Message; }
         finally { SetConnectionControls(client.ProcessId == null); }
@@ -164,7 +163,8 @@ public partial class MainWindow : Window
 
     private void SetConnectionControls(bool enabled)
     {
-        ConnectButton.IsEnabled = FindButton.IsEnabled = BrowseButton.IsEnabled = CodexPath.IsEnabled = Exclusive.IsEnabled = enabled;
+        ConnectButton.IsEnabled = FindButton.IsEnabled = BrowseButton.IsEnabled = CodexPath.IsEnabled = enabled;
+        Exclusive.IsEnabled = !scheduler.HasExecutionOwnership;
     }
     private void SetExecutable(string path)
     {
@@ -187,7 +187,7 @@ public partial class MainWindow : Window
             var found = await CodexDiscovery.DiscoverAsync(picker.FileName, manualOverride: true);
             SetExecutable(found.Path); manualPath = true; DetectedVersion.Text = found.Version;
             await scheduler.SaveExecutableAsync(found.Path);
-            Detection.Text = "Manual override validated and saved. Confirm exclusive ownership, then Connect.";
+            Detection.Text = "Manual override validated and saved. Connect to browse with Desktop open.";
         }
         catch (Exception ex) { Detection.Text = ex.Message; }
     });
@@ -199,6 +199,17 @@ public partial class MainWindow : Window
         ConnectionSettings.IsExpanded = true;
         Render(state);
     }
+    private async void AcquireClick(object sender, RoutedEventArgs e) => await Run(async () =>
+    {
+        await scheduler.AcquireExecutionOwnershipAsync(Exclusive.IsChecked == true);
+        connectionFailure = null; Connection.Text = "Execution ownership acquired. Review the queue, then switch ON.";
+        Render(await scheduler.GetSnapshotAsync());
+    });
+    private async void RefreshChatsClick(object sender, RoutedEventArgs e) => await Run(async () =>
+    {
+        await scheduler.RefreshDiscoveryAsync(); connectionFailure = null;
+        Render(await scheduler.GetSnapshotAsync());
+    });
     private async void ToggleClick(object sender, RoutedEventArgs e) => await Run(async () => { await scheduler.SetEnabledAsync(!state.Enabled); await scheduler.TickAsync(); });
     private async void AddClick(object sender, RoutedEventArgs e) => await Run(async () =>
     {

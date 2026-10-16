@@ -10,15 +10,15 @@ public sealed class ConversationView : INotifyPropertyChanged
     public string Id => conversation.Id;
     public string Heading => $"{priority}. {conversation.Name}";
     public string Workspace => conversation.Workspace;
-    public string Reason => conversation.Revalidated ? conversation.Reason : "Saved state; awaiting Codex revalidation. " + conversation.Reason;
-    public bool IsRunning => conversation.Status == ConversationStatus.Running && conversation.Revalidated;
-    public string StatusLabel => (conversation.Status switch
+    public string Reason => conversation.ObservationOnly && conversation.Attention ? "Read-only; Desktop activity unknown. " + conversation.Reason : conversation.ObservationOnly || conversation.Revalidated ? conversation.Reason : "Saved state; awaiting Codex revalidation. " + conversation.Reason;
+    public bool IsRunning => conversation.ObservationOnly ? conversation.ObservedActive : conversation.Status == ConversationStatus.Running && conversation.Revalidated;
+    public string StatusLabel => conversation.ObservationOnly ? (conversation.ObservedActive ? "Running · connected server" : "Activity unknown") : (conversation.Status switch
     {
         ConversationStatus.RateLimited => "Rate Limited",
         ConversationStatus.NeedsAttention => "Needs Attention",
         _ => conversation.Status.ToString()
     }) + (conversation.Revalidated ? "" : " · unverified");
-    public string BadgeBrush => !conversation.Revalidated ? "#4C5C59" : conversation.Status switch
+    public string BadgeBrush => conversation.ObservationOnly && conversation.ObservedActive ? "#216CBA" : !conversation.Revalidated ? "#4C5C59" : conversation.Status switch
     {
         ConversationStatus.Running => "#216CBA",
         ConversationStatus.Queued => "#6954A6",
@@ -34,6 +34,8 @@ public sealed class ConversationView : INotifyPropertyChanged
         get
         {
             var now = DateTimeOffset.UtcNow;
+            if (conversation.ObservationOnly) return (conversation.LastUsedAt is { } used ? $"Backend activity {used.ToLocalTime():g}" : "Recent-use timestamp unavailable") +
+                (conversation.ObservedTurnStatus == "completed" ? " · last recorded work completed" : "") + " · execution OFF";
             if (!conversation.Revalidated) return "Connect to verify the saved status before scheduling";
             if (IsRunning) return conversation.StartedAt is { } start ? $"Running for {Duration(now - start)}" : "Running · start time unavailable";
             if (conversation.Status == ConversationStatus.RateLimited)

@@ -15,7 +15,7 @@ if (args.FirstOrDefault() == "--live-smoke")
     await using var live = new AppServerClient();
     var found = await CodexDiscovery.DiscoverAsync(args.ElementAtOrDefault(1));
     await live.ConnectAsync(found.Path, CancellationToken.None);
-    var threads = await live.ListAsync(CancellationToken.None);
+    var threads = (await live.ListRecentAsync(CancellationToken.None)).Threads;
     Console.WriteLine($"PASS real app-server initialization and paginated discovery ({live.Version}; {threads.Count} sessions). No turns submitted.");
     return 0;
 }
@@ -166,6 +166,142 @@ Test("dashboard never confuses master ON with a verified connection", () =>
     Equal("Waiting for Codex usage", DashboardStatus.From(state, true).Heading);
     True(!DashboardStatus.From(state, true).NextAction.Contains("reset at"));
     return Task.CompletedTask;
+});
+
+ThreadSnapshot ObservedThread(int index, string status = "interrupted", bool active = false) => new(
+    $"00000000-0000-4000-8000-{index:000000000000}", $"Recent {index}", Path.GetFullPath("/repo/" + index),
+    active ? "active" : "notLoaded", [], new("saved-" + index, status), DateTimeOffset.UnixEpoch.AddSeconds(index));
+
+Test("Desktop-open discovery fills five chats active first without arming or sending", async () =>
+{
+    await using var r = new Rig(); r.Owned = false;
+    foreach (var index in Enumerable.Range(1, 7)) { var t = ObservedThread(index, active: index == 1); r.Client.Threads[t.Id] = t; }
+    await r.Scheduler.ConnectForDiscoveryAsync("fake");
+    var s = await r.State(); True(r.Scheduler.IsConnected && !r.Scheduler.HasExecutionOwnership && !s.Enabled);
+    Equal(5, s.Conversations.Count); Equal(ObservedThread(1).Id, s.Conversations[0].Id); Equal(ObservedThread(7).Id, s.Conversations[1].Id);
+    True(s.Conversations.All(c => c.ObservationOnly && !c.Armed && !c.ExecutionActive && !c.Revalidated));
+    Equal("Running · connected server", new ConversationView(s.Conversations[0]).StatusLabel);
+    Equal("Activity unknown", new ConversationView(s.Conversations[1]).StatusLabel);
+    await r.Scheduler.TickAsync(); await r.Scheduler.ConnectForDiscoveryAsync("fake");
+    await Throws(() => r.Scheduler.SetEnabledAsync(true));
+    Equal(1, r.Client.Connections); Equal(0, r.Client.Resumes); Equal(0, r.Client.Starts.Count); Equal(0, r.Client.UsageReads);
+});
+Test("execution handoff is explicit and completed chats stay disarmed", async () =>
+{
+    await using var r = new Rig(); r.Owned = false;
+    foreach (var t in new[] { ObservedThread(1), ObservedThread(2, "completed") }) r.Client.Threads[t.Id] = t;
+    await r.Scheduler.ConnectForDiscoveryAsync("fake");
+    await Throws(() => r.Scheduler.AcquireExecutionOwnershipAsync(true));
+    r.Owned = true; await Throws(() => r.Scheduler.AcquireExecutionOwnershipAsync(false));
+    await r.Scheduler.AcquireExecutionOwnershipAsync(true);
+    var s = await r.State(); True(r.Scheduler.HasExecutionOwnership && !s.Enabled);
+    True(s.Conversations.Single(c => c.Id == ObservedThread(1).Id).Armed);
+    var done = s.Conversations.Single(c => c.Id == ObservedThread(2).Id); True(!done.Armed); Equal(ConversationStatus.Completed, done.Status);
+    Equal(0, r.Client.Resumes); Equal(0, r.Client.Starts.Count);
+    await r.Enable(); Equal(1, r.Client.Starts.Count); Equal(ObservedThread(1).Id, r.Client.Starts[0]);
+});
+Test("recent refresh preserves selected order prompts and removed empty queues", async () =>
+{
+    await using var r = new Rig();
+    foreach (var t in new[] { ObservedThread(1), ObservedThread(2), ObservedThread(3) }) r.Client.Threads[t.Id] = t;
+    await r.Scheduler.ConnectForDiscoveryAsync("fake");
+    await r.Scheduler.MoveAsync(ObservedThread(1).Id, -2);
+    await r.Scheduler.UpdateAsync(ObservedThread(1).Id, c => { c.Prompt = "Keep my prompt"; c.Parallel = true; });
+    var ids = (await r.State()).Conversations.Select(c => c.Id).ToArray();
+    var newer = ObservedThread(99); r.Client.Threads[newer.Id] = newer;
+    await r.Scheduler.RefreshDiscoveryAsync();
+    Equal(string.Join(',', ids), string.Join(',', (await r.State()).Conversations.Select(c => c.Id)));
+    Equal("Keep my prompt", (await r.State()).Conversations.Single(c => c.Id == ObservedThread(1).Id).Prompt);
+    foreach (var id in ids) await r.Scheduler.RemoveAsync(id);
+    r.Now = r.Now.AddMinutes(1); await r.Scheduler.TickAsync(); Equal(0, (await r.State()).Conversations.Count);
+    Equal(0, r.Client.Resumes); Equal(0, r.Client.Starts.Count);
+});
+Test("read-only events cannot arm interrupted chats or consume usage", async () =>
+{
+    await using var r = new Rig(); var t = ObservedThread(1); r.Client.Threads[t.Id] = t;
+    await r.Scheduler.ConnectForDiscoveryAsync("fake");
+    r.Client.Emit("turn/completed", new { threadId = t.Id, turn = new { id = "outside", status = "interrupted" } });
+    await Task.Delay(50); await r.Scheduler.TickAsync();
+    True(!(await r.State()).Conversations[0].Armed); Equal(0, r.Client.UsageReads); Equal(0, r.Client.Resumes); Equal(0, r.Client.Starts.Count);
+});
+Test("discovery failures leave a read-only connection usable for retry", async () =>
+{
+    await using var r = new Rig(); r.Client.DiscoveryFails = true;
+    await r.Scheduler.ConnectForDiscoveryAsync("fake"); True(r.Scheduler.IsConnected); True((await r.State()).DiscoveryError != null);
+    r.Client.DiscoveryFails = false; var t = ObservedThread(1); r.Client.Threads[t.Id] = t;
+    await r.Scheduler.RefreshDiscoveryAsync(); Equal<string?>(null, (await r.State()).DiscoveryError); Equal(1, (await r.State()).Conversations.Count);
+    Equal(1, r.Client.Connections); Equal(0, r.Client.Resumes);
+});
+Test("ownership loss keeps discovery connected and active completions independent", async () =>
+{
+    await using var r = new Rig(); await r.Connect(); var first = await r.Add(); var second = await r.Add(); await r.Enable();
+    r.Owned = false; await r.Scheduler.TickAsync(); True(r.Scheduler.IsConnected && !r.Scheduler.HasExecutionOwnership);
+    r.Client.Complete(first); await r.WaitFor(s => !s.Conversations.Single(c => c.Id == first).ExecutionActive);
+    await r.Scheduler.RefreshDiscoveryAsync(); Equal(1, r.Client.Starts.Count); Equal(1, r.Client.Connections);
+    True((await r.State()).Conversations.Single(c => c.Id == second).ObservationOnly);
+});
+Test("read-only startup preserves uncertain attempts and stored priorities", async () =>
+{
+    var id = ObservedThread(1).Id; var attempt = new ResumeAttempt { ThreadId = id, Phase = AttemptPhase.Prepared };
+    var store = new MemoryStore { State = new AppState { Attempts = [attempt], Conversations = [new Conversation {
+        Id = id, Name = "Saved", Workspace = ObservedThread(1).Workspace, AttemptId = attempt.Id, Armed = true, Prompt = "Saved prompt" }] } };
+    await using var r = new Rig(store); r.Client.Threads[id] = ObservedThread(1); r.Client.Threads[ObservedThread(99).Id] = ObservedThread(99);
+    await r.Scheduler.ConnectForDiscoveryAsync("fake"); var s = await r.State(); Equal(1, s.Conversations.Count);
+    Equal("Saved prompt", s.Conversations[0].Prompt); Equal(attempt.Id, s.Conversations[0].AttemptId); Equal(AttemptPhase.Prepared, s.Attempts[0].Phase);
+    Equal(0, r.Client.Resumes); Equal(0, r.Client.Starts.Count); await Throws(() => r.Scheduler.SetEnabledAsync(true));
+});
+
+foreach (var mode in new[] { "recent", "fallback", "pagination", "no-live" })
+    Test("real recent-chat RPC sorting, live scope and no turns: " + mode, async () =>
+    {
+        var previous = Environment.GetEnvironmentVariable("AUTORESUME_RECENT_FIXTURE");
+        await using var client = new AppServerClient();
+        var calls = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        client.EventReceived += e => { if (e.Method == "fixture/method") calls.Enqueue(Protocol.String(e.Parameters, "method")!); };
+        try
+        {
+            Environment.SetEnvironmentVariable("AUTORESUME_RECENT_FIXTURE", mode);
+            await client.ConnectAsync(Environment.ProcessPath!, CancellationToken.None);
+            var recent = await client.ListRecentAsync(CancellationToken.None);
+            Equal(5, recent.Threads.Count);
+            Equal(ObservedThread(mode == "no-live" ? 5 : 9).Id, recent.Threads[0].Id);
+            True(recent.OrderDescription.Contains("Desktop activity is unknown"));
+            if (mode == "fallback") True(recent.OrderDescription.Contains("last updated"));
+            True(!calls.Any(m => m is "thread/resume" or "turn/start" or "thread/start" or "thread/fork"));
+            Equal(5, recent.Threads.Select(t => t.Id).Distinct().Count());
+        }
+        finally { Environment.SetEnvironmentVariable("AUTORESUME_RECENT_FIXTURE", previous); }
+    });
+
+Test("observed active badges clear on restart and disconnect", async () =>
+{
+    var t = ObservedThread(1, active: true);
+    var store = new MemoryStore { State = new AppState { Conversations = [new Conversation {
+        Id = t.Id, Name = t.Name, Workspace = t.Workspace, ObservationOnly = true, ObservedActive = true }] } };
+    await using var r = new Rig(store); True(!(await r.State()).Conversations[0].ObservedActive);
+    r.Client.Threads[t.Id] = t; await r.Scheduler.ConnectForDiscoveryAsync("fake"); True((await r.State()).Conversations[0].ObservedActive);
+    r.Client.Disconnect(); await r.WaitFor(s => !s.Conversations[0].ObservedActive);
+    True(!r.Scheduler.IsConnected); Equal("Activity unknown", new ConversationView((await r.State()).Conversations[0]).StatusLabel);
+});
+Test("selected chats refresh through list failures and reject workspace drift", async () =>
+{
+    await using var r = new Rig(); var t = ObservedThread(1, active: true); r.Client.Threads[t.Id] = t;
+    await r.Scheduler.ConnectForDiscoveryAsync("fake");
+    r.Client.DiscoveryFails = true; r.Client.Threads[t.Id] = t with { RuntimeStatus = "notLoaded" };
+    await r.Scheduler.RefreshDiscoveryAsync(); True(!(await r.State()).Conversations[0].ObservedActive);
+    r.Client.Threads[t.Id] = t with { Workspace = Path.GetFullPath("/different-workspace") };
+    await r.Scheduler.RefreshDiscoveryAsync(); var row = (await r.State()).Conversations[0];
+    Equal(t.Workspace, row.Workspace); True(!row.ObservedActive && row.Reason.Contains("workspace changed"));
+    Equal(0, r.Client.Resumes); Equal(0, r.Client.Starts.Count);
+});
+Test("owned attempts reconcile after ownership loss even when recent listing fails", async () =>
+{
+    await using var r = new Rig(); await r.Connect(); var id = await r.Add(); await r.Enable();
+    r.Owned = false; await r.Scheduler.TickAsync(); r.Client.DiscoveryFails = true;
+    var old = r.Client.Threads[id]; r.Client.Threads[id] = old with { RuntimeStatus = "idle", LastTurn = old.LastTurn! with { Status = "completed" } };
+    await r.Scheduler.RefreshDiscoveryAsync(); var s = await r.State();
+    True(!s.Conversations[0].ExecutionActive && !s.Conversations[0].Armed); Equal(AttemptPhase.Completed, s.Attempts[0].Phase);
+    Equal(1, r.Client.Starts.Count);
 });
 
 Test("find native Codex in the current nested npm Windows layout", () =>

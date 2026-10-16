@@ -20,20 +20,24 @@ internal sealed class FakeCodex : ICodexClient
     public readonly Dictionary<string, ThreadSnapshot> Threads = [];
     public readonly List<string> Starts = [];
     public UsageSnapshot Usage = new(true, false, null, "Available");
-    public int UsageReads, Rejections;
+    public int UsageReads, Rejections, Connections, Resumes;
+    public bool DiscoveryFails;
     public Action<string>? BeforeStart;
     public bool LoseResponse, MismatchRead, MismatchResume;
     public string? NextTurnError;
     public string? ReadFailureId;
     public event Action<CodexEvent>? EventReceived;
     public event Action<string>? Disconnected;
-    public Task ConnectAsync(string executable, CancellationToken ct) => Task.CompletedTask;
+    public Task ConnectAsync(string executable, CancellationToken ct) { Connections++; return Task.CompletedTask; }
+    public Task<RecentThreadListing> ListRecentAsync(CancellationToken ct) => DiscoveryFails
+        ? throw new IOException("Discovery unavailable") : Task.FromResult(new RecentThreadListing(RecentChats.Order(Threads.Values), "Verified active first, then most recent activity. Desktop activity unknown."));
     public Task<IReadOnlyList<ThreadSnapshot>> ListAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<ThreadSnapshot>>(Threads.Values.ToList());
     public Task<ThreadSnapshot> ReadAsync(string id, CancellationToken ct) => id == ReadFailureId
         ? throw new IOException("Session unavailable")
         : Task.FromResult(MismatchRead ? Threads[id] with { Id = Guid.NewGuid().ToString() } : Threads[id]);
     public Task<ThreadSnapshot> ResumeAsync(string id, CancellationToken ct)
     {
+        Resumes++;
         if (MismatchResume) return Task.FromResult(Threads[id] with { Id = Guid.NewGuid().ToString() });
         Threads[id] = Threads[id] with { RuntimeStatus = "idle" };
         return Task.FromResult(Threads[id]);

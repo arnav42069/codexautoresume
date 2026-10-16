@@ -35,7 +35,7 @@ public sealed partial class AppServerClient : ICodexClient
         // Drain stderr to avoid a blocked child. Never expose configuration or credential output.
         _ = DrainErrorsAsync(process.StandardError);
         reader = ReadLoopAsync();
-        await CallAsync("initialize", new { clientInfo = new { name = "codex_autoresume", title = "Codex AutoResume", version = "0.2.2" } }, ct);
+        await CallAsync("initialize", new { clientInfo = new { name = "codex_autoresume", title = "Codex AutoResume", version = "0.3.0" } }, ct);
         await WriteAsync(new { method = "initialized", @params = new { } }, ct);
     }
 
@@ -204,7 +204,8 @@ public static class Protocol
         var status = value.GetProperty("status");
         return new(value.GetProperty("id").GetString()!, String(value, "name") ?? String(value, "preview") ?? "Untitled conversation",
             value.GetProperty("cwd").GetString()!, status.GetProperty("type").GetString()!,
-            status.TryGetProperty("activeFlags", out var flags) ? flags.EnumerateArray().Select(f => f.GetString()!).ToArray() : [], null);
+            status.TryGetProperty("activeFlags", out var flags) ? flags.EnumerateArray().Select(f => f.GetString()!).ToArray() : [], null,
+            Timestamp(value, "recencyAt"), Timestamp(value, "updatedAt"), Timestamp(value, "createdAt"));
     }
     public static TurnSnapshot Turn(JsonElement value)
     {

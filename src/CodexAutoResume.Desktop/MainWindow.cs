@@ -17,7 +17,7 @@ public sealed class MainWindow : Window
     private readonly StackPanel cards = new() { Spacing = 10 };
     private readonly List<(ConversationView View, TextBlock Clock, Border Badge)> clocks = [];
     private readonly TextBox path = new() { MinWidth = 220, Watermark = "Codex CLI is detected automatically" };
-    private readonly CheckBox exclusive = new() { Content = new TextBlock { Text = "I grant AutoResume exclusive ownership of these sessions. Other Codex clients will remain closed.", TextWrapping = TextWrapping.Wrap } };
+    private readonly CheckBox exclusive = new() { Content = new TextBlock { Text = "I grant AutoResume exclusive ownership of these sessions. For execution only: other Codex clients are closed.", TextWrapping = TextWrapping.Wrap } };
     private readonly TextBlock connection = Text("Disconnected · scheduling is OFF", "#B0C3DD");
     private readonly TextBlock summary = Text("");
     private readonly TextBlock usage = Text("Usage is verified before scheduling.", "#A6BDD9");
@@ -42,12 +42,12 @@ public sealed class MainWindow : Window
             new TextBlock { Text = "Codex AutoResume", FontSize = 26, FontWeight = FontWeight.SemiBold },
             Text("Your existing sessions. A durable queue. No repeated prompts.", "#A6BDD9") } });
         var tools = new DockPanel { LastChildFill = true };
-        foreach (var button in new[] { Button("Connect", Connect), Button("Browse…", Browse), Button("Find Codex", Find) })
+        foreach (var button in new[] { Button("Connect read-only", Connect), Button("Browse…", Browse), Button("Find Codex", Find) })
         { DockPanel.SetDock(button, Dock.Right); tools.Children.Add(button); }
         tools.Children.Add(path);
         var connectPanel = new StackPanel { Spacing = 12, Children = {
-            Text("Finish active work and close Codex Desktop and other clients before connecting. Desktop UI synchronization is not supported.", "#F3C77A"),
-            tools, exclusive, connection } };
+            Text("Desktop may remain open for browsing. For execution ownership, finish active work and close other clients. Desktop UI synchronization is unsupported.", "#F3C77A"),
+            tools, exclusive, new WrapPanel { Children = { Button("Acquire execution ownership", Acquire), Button("Refresh chats", Refresh) } }, connection } };
         var account = new Border { Background = Brush.Parse("#1B293C"), CornerRadius = new CornerRadius(12), Padding = new Thickness(16), Child = connectPanel };
         var queueHeader = new DockPanel();
         var add = Button("+ Add conversation", Add); DockPanel.SetDock(add, Dock.Right); queueHeader.Children.Add(add); queueHeader.Children.Add(summary);
@@ -94,8 +94,24 @@ public sealed class MainWindow : Window
             {
                 try { DesktopIntegration.CreateShortcut(Environment.ProcessPath!); }
                 catch (Exception ex) { connection.Text = "Desktop shortcut: " + ex.Message; }
-                if (CodexExecutableResolver.IsAutomatic(path.Text)) await Run(Find);
+                await Run(Connect);
                 if (Program.StartInTray) { if (OperatingSystem.IsMacOS()) Hide(); else WindowState = WindowState.Minimized; }
+            }
+            if (Program.SelfTest && Program.FixtureDirectory != null)
+            {
+                var originalPath = Environment.GetEnvironmentVariable("PATH");
+                try
+                {
+                    Environment.SetEnvironmentVariable("PATH", Program.FixtureDirectory + Path.PathSeparator + originalPath);
+                    await Connect();
+                    var observed = await scheduler.GetSnapshotAsync();
+                    if (!scheduler.IsConnected || scheduler.HasExecutionOwnership || observed.Enabled || observed.Conversations.Count == 0 || observed.Conversations.Any(c => c.Armed || !c.ObservationOnly))
+                        throw new InvalidOperationException("Native read-only automatic connection/queue import failed.");
+                    Console.WriteLine("PASS native automatic read-only connection and unarmed recent queue.");
+                }
+                catch (Exception ex)
+                { await FailSelfTest(ex); return; }
+                finally { Environment.SetEnvironmentVariable("PATH", originalPath); }
             }
             if (Program.SelfTest || Program.Screenshot != null)
             {
@@ -107,9 +123,16 @@ public sealed class MainWindow : Window
                     if (Program.Screenshot != null) bitmap.Save(Program.Screenshot);
                     if (Program.SelfTest) { Console.WriteLine("PASS native desktop window rendered; scheduling remains OFF."); await Exit(true); }
                 }
-                catch (Exception ex) { Console.Error.WriteLine(ex); ((IClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!).Shutdown(1); }
+                catch (Exception ex) { await FailSelfTest(ex); }
             }
         };
+    }
+
+    private async Task FailSelfTest(Exception error)
+    {
+        Console.Error.WriteLine(error); exiting = true; timer.Stop();
+        await scheduler.DisposeAsync(); tray?.Dispose();
+        ((IClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!).Shutdown(1);
     }
 
     private static TextBlock Text(string value, string color = "#E8EDF6") => new() { Text = value, Foreground = Brush.Parse(color), TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
@@ -127,33 +150,42 @@ public sealed class MainWindow : Window
     }
     private async Task Find()
     {
-        var current = path.Text; connection.Text = "Looking for Codex…";
-        var found = await Task.Run(() => CodexExecutableResolver.Find());
-        if (path.Text != current) return;
-        if (found != null) { path.Text = found; connection.Text = "Codex found. Close other clients, confirm exclusive ownership, then connect."; }
-        else connection.Text = "Codex CLI was not found. Install it, sign in, then use Find Codex or Browse.";
+        if (client.ProcessId != null) { connection.Text = "Restart AutoResume to choose another Codex installation."; return; }
+        var found = await CodexDiscovery.DiscoverAsync(); path.Text = found.Path;
+        await scheduler.SaveExecutableAsync(found.Path);
+        connection.Text = $"{found.Version} detected. Connect read-only; Desktop may stay open.";
     }
     private async Task Browse()
     {
         if (client.ProcessId != null) return;
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions { Title = "Select the Codex CLI executable", AllowMultiple = false });
-        if (files.FirstOrDefault()?.TryGetLocalPath() is { } selected) path.Text = selected;
+        if (files.FirstOrDefault()?.TryGetLocalPath() is { } selected)
+        {
+            var found = await CodexDiscovery.DiscoverAsync(selected, manualOverride: true);
+            path.Text = found.Path; await scheduler.SaveExecutableAsync(found.Path);
+            connection.Text = $"{found.Version} selected. Connect read-only; Desktop may stay open.";
+        }
     }
     private async Task Connect()
     {
-        if (client.ProcessId != null) { connection.Text = "Already connected, or restart AutoResume to retry this server."; return; }
-        if (exclusive.IsChecked != true) { connection.Text = "Close other Codex clients and confirm exclusive ownership first."; return; }
-        path.IsEnabled = exclusive.IsEnabled = false;
+        if (scheduler.IsConnected) { connection.Text = "Already connected. Use Refresh chats to update discovery."; return; }
+        if (client.ProcessId != null) { connection.Text = "Restart AutoResume to retry the existing server."; return; }
+        path.IsEnabled = false;
         try
         {
-            var selected = path.Text;
-            var executable = await Task.Run(() => CodexExecutableResolver.Resolve(selected));
-            path.Text = executable; connection.Text = "Connecting and revalidating saved sessions…";
-            await scheduler.ConnectAsync(executable, true);
-            connection.Text = $"Connected · {client.Version} · owned app-server";
+            var found = await CodexDiscovery.DiscoverAsync(path.Text);
+            path.Text = found.Path; connection.Text = "Connecting read-only and discovering recent chats…";
+            await scheduler.ConnectForDiscoveryAsync(found.Path);
+            connection.Text = $"Connected read-only · {found.Version} · Desktop may remain open";
         }
-        finally { path.IsEnabled = exclusive.IsEnabled = client.ProcessId == null; }
+        finally { path.IsEnabled = client.ProcessId == null; }
     }
+    private async Task Acquire()
+    {
+        await scheduler.AcquireExecutionOwnershipAsync(exclusive.IsChecked == true);
+        connection.Text = "Execution ownership acquired. Review the queue, then switch ON.";
+    }
+    private Task Refresh() => scheduler.RefreshDiscoveryAsync();
     private async Task Add()
     {
         var id = await Dialogs.Pick(this, await scheduler.DiscoverAsync()); if (id == null) return;
@@ -176,14 +208,14 @@ public sealed class MainWindow : Window
     {
         if (exiting) return; state = next;
         toggle.Content = next.Enabled ? "● ON" : "○ OFF"; startup.IsChecked = next.StartWithWindows;
-        int Count(ConversationStatus status) => next.Conversations.Count(c => c.Status == status);
+        int Count(ConversationStatus status) => next.Conversations.Count(c => !c.ObservationOnly && c.Status == status || status == ConversationStatus.Running && c.ObservationOnly && c.ObservedActive);
         summary.Text = $"{Count(ConversationStatus.Running)} running · {Count(ConversationStatus.Queued)} queued · {Count(ConversationStatus.RateLimited)} rate limited · {Count(ConversationStatus.Completed)} completed";
-        if (next.Conversations.Any(c => !c.Revalidated)) summary.Text = "Last known: " + summary.Text;
+        if (next.Conversations.Any(c => !c.ObservationOnly && !c.Revalidated)) summary.Text = "Last known: " + summary.Text;
         activity.Text = string.Join(Environment.NewLine, next.Log);
-        usage.Text = next.Conversations.Any(c => c.WaitingForUsage) ? "Usage limited · reset estimates below are verified with Codex before resuming." : "Usage is checked before scheduling. Completed work stays completed.";
+        usage.Text = !scheduler.HasExecutionOwnership ? (next.DiscoveryError ?? next.DiscoveryOrder) : next.Conversations.Any(c => c.WaitingForUsage) ? "Usage limited · reset estimates below are verified with Codex before resuming." : "Usage is checked before scheduling. Completed work stays completed.";
         cards.Children.Clear(); clocks.Clear();
         if (next.Conversations.Count == 0)
-            cards.Children.Add(new Border { Padding = new Thickness(22), Child = Text("Connect, then select up to five existing conversations. Your queue and statuses are saved across restarts.", "#A6BDD9") });
+            cards.Children.Add(new Border { Padding = new Thickness(22), Child = Text("Your five recent chats appear automatically in an empty queue. Existing priorities stay fixed. Desktop may remain open while browsing.", "#A6BDD9") });
         var queued = next.Conversations.Where(c => c.Status == ConversationStatus.Queued).Select(c => c.Id).ToList();
         for (int i = 0; i < next.Conversations.Count; i++)
         {

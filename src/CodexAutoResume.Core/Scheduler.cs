@@ -5,7 +5,7 @@ namespace CodexAutoResume.Core;
 
 // All commands, events and polls pass through one gate. The RPC reader never waits
 // for that gate, so a request can complete while its notifications are queued.
-public sealed class Scheduler : IAsyncDisposable
+public sealed partial class Scheduler : IAsyncDisposable
 {
     private readonly ICodexClient client;
     private readonly IStateStore store;
@@ -19,13 +19,15 @@ public sealed class Scheduler : IAsyncDisposable
     private readonly AppState state;
     private Task? eventTask, pollTask;
     private volatile bool connected;
-    private bool ownershipConfirmed, storageFault;
+    private volatile bool ownershipConfirmed;
+    private bool storageFault, autoFillAllowed;
     private DateTimeOffset nextPoll;
     private UsageSnapshot? usage;
     private DateTimeOffset usageCheckedAt;
     public event Action<AppState>? Changed;
     public event Action<string>? Notice;
     public bool IsConnected => connected;
+    public bool HasExecutionOwnership => connected && ownershipConfirmed;
     public AppState Snapshot => StateJson.Clone(state); // Read on the gate or before starting.
 
     public Scheduler(ICodexClient client, IStateStore store, Func<DateTimeOffset>? clock = null,
@@ -37,8 +39,13 @@ public sealed class Scheduler : IAsyncDisposable
         ownershipStillValid = ownershipCheck ?? (() => true);
         this.backgroundPolling = backgroundPolling;
         state = store.Load();
+        autoFillAllowed = state.Conversations.Count == 0;
         state.Enabled = false; // A new process must explicitly reacquire exclusive ownership.
-        foreach (var c in state.Conversations) c.Revalidated = false;
+        foreach (var c in state.Conversations)
+        {
+            c.Revalidated = false; c.ObservedActive = false; c.ObservedAt = null;
+            if (c.ObservationOnly) c.Reason = "Saved chat; activity unknown until read-only discovery reconnects.";
+        }
         client.EventReceived += e =>
         {
             if (e.RequestId != null || e.Method is "turn/started" or "turn/completed" or "thread/status/changed" or "error" or "account/rateLimits/updated")
@@ -52,9 +59,11 @@ public sealed class Scheduler : IAsyncDisposable
         await InGateAsync(async () =>
         {
             if (!exclusiveOwnership || !ownershipStillValid()) throw new InvalidOperationException("Close Codex Desktop and other clients, then explicitly confirm exclusive ownership.");
-            await client.ConnectAsync(executable, ct);
+            if (!connected) await client.ConnectAsync(executable, ct);
+            else if (executable != state.CodexPath) throw new InvalidOperationException("Restart AutoResume to change its executable.");
             state.CodexPath = executable;
             connected = ownershipConfirmed = true;
+            foreach (var row in state.Conversations) row.ObservationOnly = false;
             Log("Connected to owned Codex app-server. Desktop UI synchronization is unsupported.");
             await RevalidateAllAsync(ct);
             Commit();
@@ -66,26 +75,33 @@ public sealed class Scheduler : IAsyncDisposable
     public async Task<IReadOnlyList<ThreadSnapshot>> DiscoverAsync(CancellationToken ct = default)
     {
         IReadOnlyList<ThreadSnapshot> threads = [];
-        await InGateAsync(async () => { RequireConnection(); threads = await client.ListAsync(ct); }, ct);
+        await InGateAsync(async () => { RequireDiscoveryConnection(); threads = (await client.ListRecentAsync(ct)).Threads; }, ct);
         return threads;
     }
 
     public async Task<ThreadSnapshot> InspectAsync(string id, CancellationToken ct = default)
     {
         ThreadSnapshot? result = null;
-        await InGateAsync(async () => { RequireConnection(); result = await client.ReadAsync(id, ct); AppServerClient.ValidateId(id, result.Id); }, ct);
+        await InGateAsync(async () => { RequireDiscoveryConnection(); result = await client.ReadAsync(id, ct); AppServerClient.ValidateId(id, result.Id); }, ct);
         return result!;
     }
 
     public Task AddAsync(string id, CancellationToken ct = default) => InGateAsync(async () =>
     {
-        RequireConnection();
+        RequireDiscoveryConnection();
         if (!Guid.TryParse(id, out var uuid)) throw new ArgumentException("Enter an exact session UUID.");
         id = uuid.ToString();
         if (state.Conversations.Count >= 5) throw new InvalidOperationException("The queue supports at most five conversations.");
         if (state.Conversations.Any(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("This conversation is already selected.");
         var thread = await client.ReadAsync(id, ct);
         AppServerClient.ValidateId(id, thread.Id);
+        if (!ownershipConfirmed)
+        {
+            if (!Path.IsPathFullyQualified(thread.Workspace)) throw new InvalidDataException("The selected conversation has no absolute workspace path.");
+            var observed = new Conversation { Id = id, Name = thread.Name, Workspace = thread.Workspace, ObservationOnly = true };
+            Observe(observed, thread); state.Conversations.Add(observed);
+            autoFillAllowed = false; Log($"Selected {observed.Name} for read-only observation."); Commit(); return;
+        }
         var key = await repositoryKey(thread.Workspace, ct);
         var c = new Conversation { Id = id, Name = thread.Name, Workspace = thread.Workspace, RepositoryKey = key };
         state.Conversations.Add(c);
@@ -129,7 +145,7 @@ public sealed class Scheduler : IAsyncDisposable
     {
         var c = Find(id);
         if (c.ExecutionActive || Uncertain(c)) throw new InvalidOperationException("Cannot remove active or uncertain work. Reconcile it first.");
-        state.Conversations.Remove(c); Log($"Removed {c.Name}."); Commit(); return Task.CompletedTask;
+        autoFillAllowed = false; state.Conversations.Remove(c); Log($"Removed {c.Name}."); Commit(); return Task.CompletedTask;
     }, ct);
 
     // Explicit user action. Never invoked by a timer, completion or reconnect.
@@ -181,11 +197,19 @@ public sealed class Scheduler : IAsyncDisposable
     public Task TickAsync(CancellationToken ct = default) => InGateAsync(async () =>
     {
         if (!connected || storageFault) return;
+        if (!ownershipConfirmed)
+        {
+            if (now() >= nextPoll) await RefreshObservationCoreAsync(ct);
+            return;
+        }
         if (!ownershipStillValid())
         {
             state.Enabled = false; ownershipConfirmed = false;
-            foreach (var c in state.Conversations.Where(c => c.Armed && !c.ExecutionActive)) Attention(c, "Another Codex client appeared; exclusive ownership lost. Restart AutoResume after closing other clients.");
-            Log("Exclusive ownership lost; future scheduling stopped. Active turns were not interrupted."); Commit(); return;
+            foreach (var c in state.Conversations.Where(c => c.Armed && !c.ExecutionActive)) Attention(c, "Another Codex client appeared; exclusive ownership lost. Close other clients, then acquire execution ownership again.");
+            foreach (var row in state.Conversations.Where(c => !c.ExecutionActive && !Uncertain(c)))
+            { row.ObservationOnly = true; row.Revalidated = false; }
+            nextPoll = DateTimeOffset.MinValue;
+            Log("Exclusive ownership lost; switched to read-only. Active turns were not interrupted."); Commit(); return;
         }
         if (now() >= nextPoll)
         {
@@ -410,14 +434,21 @@ public sealed class Scheduler : IAsyncDisposable
                 {
                     if (e.Method == "connection/lost")
                     {
-                        connected = false; state.Enabled = false;
-                        foreach (var row in state.Conversations) { row.Revalidated = false; Attention(row, "Connection lost. Restart and reconcile before retrying."); }
+                        connected = ownershipConfirmed = false; state.Enabled = false;
+                        foreach (var row in state.Conversations) { row.Revalidated = false; row.ObservedActive = false; row.ObservedAt = null; Attention(row, "Connection lost. Restart and reconcile before retrying."); }
                         Log("App-server disconnected; scheduling OFF."); Commit(); return;
                     }
                     var id = Protocol.String(e.Parameters, "threadId");
                     var c = state.Conversations.FirstOrDefault(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
                     try
                     {
+                    if (!ownershipConfirmed && (c == null || (!c.ExecutionActive && !Uncertain(c))))
+                    {
+                        if (e.RequestId != null) await client.RejectRequestAsync(e, lifetime.Token);
+                        if (c != null) Observe(c, await client.ReadAsync(c.Id, lifetime.Token));
+                        nextPoll = DateTimeOffset.MinValue;
+                        Commit(); return;
+                    }
                     if (e.RequestId != null)
                     {
                         if (c != null) Attention(c, "Manual intervention required: " + e.Method + ". Request declined; resolve in a supported client, then retry.");
@@ -498,6 +529,7 @@ public sealed class Scheduler : IAsyncDisposable
     {
         foreach (var c in state.Conversations)
         {
+            if (c.ObservationOnly) continue;
             if (c.Attention) { c.Status = ConversationStatus.NeedsAttention; continue; }
             if (c.ExecutionActive) { c.Status = ConversationStatus.Running; continue; }
             if (c.Status == ConversationStatus.Completed) continue;
@@ -518,6 +550,10 @@ public sealed class Scheduler : IAsyncDisposable
     {
         state.Log.Insert(0, $"{now():u}  {text}");
         if (state.Log.Count > 200) state.Log.RemoveRange(200, state.Log.Count - 200);
+    }
+    private void RequireDiscoveryConnection()
+    {
+        if (!connected || storageFault) throw new InvalidOperationException("Connect to Codex before browsing conversations.");
     }
     private void RequireConnection()
     {

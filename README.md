@@ -10,7 +10,8 @@ A desktop app that resumes interrupted Codex work when usage is available again.
 
 ![Windows Phosphor dashboard with sample conversations](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-Phosphor.png)
 
-- Queue up to five existing conversations.
+- Connect with Codex Desktop open and discover your five recent chats.
+- Keep your queue and priorities across refreshes.
 - Set priorities or run independent repositories in parallel.
 - See live status, elapsed time and verified reset estimates.
 - Windows: a Phosphor dashboard with saved colors and reduced motion. The pink is a preview.
@@ -18,7 +19,7 @@ A desktop app that resumes interrupted Codex work when usage is available again.
 
 Completed work stays completed. Switching **OFF** stops future continuations while active work finishes.
 
-> Close Codex Desktop while AutoResume owns its sessions. Check your original UUIDs with the [continuity diagnostic](docs/DESKTOP-FEASIBILITY.md) first. AutoResume uses its own app-server, creates no replacement conversations, and cannot guarantee Desktop UI updates.
+> Desktop may stay open for browsing. Close it before handing execution ownership to AutoResume. Check your original UUIDs with the [continuity diagnostic](docs/DESKTOP-FEASIBILITY.md) first. AutoResume uses its own app-server, creates no replacement conversations, and cannot guarantee Desktop UI updates.
 
 ## Install
 
@@ -43,9 +44,9 @@ Prefer a ZIP? Download v0.2.2, extract it somewhere permanent and open the app. 
 
 Linux needs X11 or XWayland. macOS needs version 12+; builds are ad-hoc signed, not notarized.
 
-1. Let active Codex work finish, then close Desktop and other Codex clients.
-2. Open AutoResume. Codex is detected automatically; use **Re-detect** on Windows or **Find Codex** on Linux/macOS if needed.
-3. Confirm exclusive ownership, connect, add your verified conversations and switch **ON**.
+1. Open AutoResume. It detects Codex, connects read-only and fills an empty queue with up to five recent chats. Desktop may stay open.
+2. Review the queue. Verified active chats come first; other Desktop activity is labeled unknown. Your existing priorities stay fixed.
+3. To resume work, finish active Codex work, close other clients, confirm ownership and choose **Acquire execution ownership**, then switch **ON**.
 
 **ON** controls scheduling. The watcher panel shows whether the connection is actually ready.
 
@@ -63,4 +64,4 @@ On Linux or macOS, use `bash scripts/build-desktop.sh linux-x64` or your matchin
 
 [npm commands](docs/NPM-INSTALL.md) · [Usage](docs/USAGE.md) · [Integration](docs/INTEGRATION.md) · [Validation](docs/VALIDATION.md)
 
-[Appearance and automatic Codex detection](docs/PHOSPHOR.md)
+[Desktop-open discovery](docs/DISCOVERY.md) · [Appearance and Codex detection](docs/PHOSPHOR.md)

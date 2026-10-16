@@ -53,10 +53,13 @@ public static class ThemePalette
 
 public record DashboardStatus(string Heading, string NextAction, string Health)
 {
-    public static DashboardStatus From(AppState state, bool connected, string? failure = null)
+    public static DashboardStatus From(AppState state, bool connected, string? failure = null, bool executionOwned = true)
     {
         if (failure != null) return new("Connection needs attention", failure, ThemePalette.Failure);
-        if (!connected) return new("Watcher disconnected", "Close other Codex clients, confirm exclusive ownership, then Connect.", ThemePalette.Attention);
+        if (!connected) return new("Watcher disconnected", "Codex is detected automatically. Connect to browse chats; Desktop may stay open.", ThemePalette.Attention);
+        if (!executionOwned) return state.DiscoveryError != null
+            ? new("Connected · discovery needs attention", state.DiscoveryError + " Use Refresh chats to retry.", ThemePalette.Attention)
+            : new("Connected · read-only · scheduling OFF", "Desktop may stay open. For continuations, finish work, close other clients and acquire execution ownership.", ThemePalette.Secondary);
         if (!state.Enabled) return new("Connected · scheduling OFF", "Switch ON to schedule eligible, revalidated conversations.", ThemePalette.Secondary);
         if (state.Conversations.Any(c => !c.Revalidated)) return new("Waiting for revalidation", "Saved conversation states must be verified before scheduling.", ThemePalette.Attention);
         if (state.Conversations.Any(c => c.Attention)) return new("Manual action required", "Inspect the conversation reason, resolve it, then Retry / rearm.", ThemePalette.Attention);
