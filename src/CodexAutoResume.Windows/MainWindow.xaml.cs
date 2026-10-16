@@ -141,7 +141,7 @@ public partial class MainWindow : Window
         {
             RecordError(ex.Message + (client.ProcessId != null ? " Restart AutoResume before reconnecting." : " Re-detect or Browse, then Connect to retry."));
         }
-        finally { SetConnectionControls(client.ProcessId == null); Render(scheduler.Snapshot); }
+        finally { SetConnectionControls(client.ProcessId == null); Render(await scheduler.GetSnapshotAsync()); }
     }
 
     private async Task FindCodexAsync(bool showMissing) => await Run(async () =>
@@ -197,7 +197,7 @@ public partial class MainWindow : Window
         localEvents.Insert(0, $"{DateTimeOffset.UtcNow:u}  Error: {message}");
         if (localEvents.Count > 50) localEvents.RemoveAt(50);
         ConnectionSettings.IsExpanded = true;
-        Render(scheduler.Snapshot);
+        Render(state);
     }
     private async void ToggleClick(object sender, RoutedEventArgs e) => await Run(async () => { await scheduler.SetEnabledAsync(!state.Enabled); await scheduler.TickAsync(); });
     private async void AddClick(object sender, RoutedEventArgs e) => await Run(async () =>

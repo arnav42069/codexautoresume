@@ -18,7 +18,7 @@ if rid.startswith('osx-'):
     with (contents / 'Info.plist').open('wb') as f:
         plistlib.dump({'CFBundleName': 'Codex AutoResume', 'CFBundleDisplayName': 'Codex AutoResume',
             'CFBundleIdentifier': 'dev.arnav.codexautoresume', 'CFBundleExecutable': 'CodexAutoResume',
-            'CFBundlePackageType': 'APPL', 'CFBundleVersion': '0.2.1', 'CFBundleShortVersionString': '0.2.1',
+            'CFBundlePackageType': 'APPL', 'CFBundleVersion': '0.2.2', 'CFBundleShortVersionString': '0.2.2',
             'CFBundleIconFile': 'icon.icns', 'NSHighResolutionCapable': True, 'LSMinimumSystemVersion': '12.0',
             'NSDesktopFolderUsageDescription': 'Create your Codex AutoResume desktop shortcut.'}, f)
     with tempfile.TemporaryDirectory() as work:

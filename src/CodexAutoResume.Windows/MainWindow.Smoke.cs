@@ -67,7 +67,7 @@ public partial class MainWindow
         Render(sample); await Capture("05-queue-statuses");
         Width = 640; await Capture("06-narrow");
         Assert(rows.Count == 5 && rows.Any(r => r.StatusLabel == "Rate Limited") && rows.Any(r => r.StatusLabel == "Needs Attention"), "Queue status presentation failed.");
-        Render(scheduler.Snapshot);
+        Render(await scheduler.GetSnapshotAsync());
         Console.WriteLine("PASS WPF theme preview, invalid HEX, reduced motion, failure visibility, native discovery/connection and narrow layout.");
     }
 }

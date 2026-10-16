@@ -35,7 +35,7 @@ public sealed partial class AppServerClient : ICodexClient
         // Drain stderr to avoid a blocked child. Never expose configuration or credential output.
         _ = DrainErrorsAsync(process.StandardError);
         reader = ReadLoopAsync();
-        await CallAsync("initialize", new { clientInfo = new { name = "codex_autoresume", title = "Codex AutoResume", version = "0.2.1" } }, ct);
+        await CallAsync("initialize", new { clientInfo = new { name = "codex_autoresume", title = "Codex AutoResume", version = "0.2.2" } }, ct);
         await WriteAsync(new { method = "initialized", @params = new { } }, ct);
     }
 
