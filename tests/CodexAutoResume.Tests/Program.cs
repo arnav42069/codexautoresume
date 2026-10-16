@@ -21,6 +21,111 @@ void True(bool condition) { if (!condition) throw new Exception("Assertion faile
 async Task Throws(Func<Task> run) { try { await run(); } catch { return; } throw new Exception("Expected an exception"); }
 JsonElement Json(string text) => JsonDocument.Parse(text).RootElement.Clone();
 
+void WithCodexInstallation(Action<string, Func<string[], string>> check)
+{
+    var directory = Path.Combine(Path.GetTempPath(), "codex locator & test-" + Guid.NewGuid());
+    Directory.CreateDirectory(directory);
+    string Add(params string[] parts)
+    {
+        var path = Path.Combine(new[] { directory }.Concat(parts).ToArray());
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "fixture only; not an executable");
+        return path;
+    }
+    try { check(directory, Add); }
+    finally { Directory.Delete(directory, recursive: true); }
+}
+
+Test("find native Codex in the current nested npm Windows layout", () =>
+{
+    WithCodexInstallation((root, add) =>
+    {
+        add(["codex.cmd"]);
+        var executable = add(["node_modules", "@openai", "codex", "node_modules", "@openai", "codex-win32-x64", "vendor", "x86_64-pc-windows-msvc", "bin", "codex.exe"]);
+        Equal(executable, CodexExecutableResolver.Find("codex.exe", [root]));
+        Equal(executable, CodexExecutableResolver.Find(Path.Combine(root, "codex.cmd"), []));
+    });
+    return Task.CompletedTask;
+});
+Test("find native Codex in the bundled npm vendor layout", () =>
+{
+    WithCodexInstallation((root, add) =>
+    {
+        var executable = add(["node_modules", "@openai", "codex", "vendor", "x86_64-pc-windows-msvc", "codex", "codex.exe"]);
+        Equal(executable, CodexExecutableResolver.Find("codex", [root]));
+    });
+    return Task.CompletedTask;
+});
+Test("find native Codex in a hoisted optional npm package", () =>
+{
+    WithCodexInstallation((root, add) =>
+    {
+        var executable = add(["node_modules", "@openai", "codex-win32-x64", "vendor", "x86_64-pc-windows-msvc", "codex", "codex.exe"]);
+        Equal(executable, CodexExecutableResolver.Find(null, [root]));
+    });
+    return Task.CompletedTask;
+});
+Test("native Codex on PATH takes precedence and quoted paths with spaces work", () =>
+{
+    WithCodexInstallation((root, add) =>
+    {
+        var first = add(["first", "codex.exe"]); add(["second", "codex.exe"]);
+        Equal(first, CodexExecutableResolver.Find("codex.exe", ["\"" + Path.Combine(root, "first") + "\"", Path.Combine(root, "second")]));
+        Equal(first, CodexExecutableResolver.Find("\"" + first + "\"", []));
+    });
+    return Task.CompletedTask;
+});
+Test("missing explicit Codex executable never silently switches installations", () =>
+{
+    WithCodexInstallation((root, add) =>
+    {
+        add(["codex.exe"]);
+        Equal<string?>(null, CodexExecutableResolver.Find(Path.Combine(root, "missing", "codex.exe"), [root]));
+    });
+    return Task.CompletedTask;
+});
+Test("a shell shim alone is never returned as the native executable", () =>
+{
+    WithCodexInstallation((root, add) =>
+    {
+        var shim = add(["codex.cmd"]); add(["codex.ps1"]); add(["codex"]);
+        Equal<string?>(null, CodexExecutableResolver.Find("codex", [root]));
+        Equal<string?>(null, CodexExecutableResolver.Find(shim, []));
+    });
+    return Task.CompletedTask;
+});
+Test("automatic discovery skips Desktop WindowsApps aliases", () =>
+{
+    WithCodexInstallation((root, add) =>
+    {
+        add(["WindowsApps", "codex.exe"]);
+        var native = add(["cli", "codex.exe"]);
+        Equal(native, CodexExecutableResolver.Find("codex", [Path.Combine(root, "WindowsApps"), Path.Combine(root, "cli")]));
+    });
+    return Task.CompletedTask;
+});
+Test("automatic discovery respects a custom npm global prefix", () =>
+{
+    var oldPath = Environment.GetEnvironmentVariable("PATH");
+    var oldPrefix = Environment.GetEnvironmentVariable("NPM_CONFIG_PREFIX");
+    try
+    {
+        WithCodexInstallation((root, add) =>
+        {
+            var native = add(["node_modules", "@openai", "codex", "vendor", "x86_64-pc-windows-msvc", "bin", "codex.exe"]);
+            Environment.SetEnvironmentVariable("PATH", "");
+            Environment.SetEnvironmentVariable("NPM_CONFIG_PREFIX", root);
+            Equal(native, CodexExecutableResolver.Resolve("codex.exe"));
+        });
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("PATH", oldPath);
+        Environment.SetEnvironmentVariable("NPM_CONFIG_PREFIX", oldPrefix);
+    }
+    return Task.CompletedTask;
+});
+
 Test("priority ordering and sequential lane", async () =>
 {
     await using var r = new Rig(); await r.Connect();

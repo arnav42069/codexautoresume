@@ -34,7 +34,7 @@ To uninstall, close the tray app and run `npm uninstall -g codexautoresume`. You
 
 ## Run
 
-Connect to `codex.exe`, add your verified sessions, set priorities, then switch **ON**.
+Codex is detected automatically, including npm installs. Close Desktop, confirm exclusive ownership and connect. Add your verified sessions, set priorities, then switch **ON**.
 
 Closing the window keeps it running in the tray.
 

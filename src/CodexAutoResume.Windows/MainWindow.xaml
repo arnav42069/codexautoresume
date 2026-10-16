@@ -10,7 +10,12 @@
     <Border Grid.Row="1" Background="#1A2435" CornerRadius="8" Padding="12" Margin="0,14,0,8">
       <StackPanel>
         <TextBlock Text="Desktop control and UI synchronization are not supported. Close Desktop and other Codex clients before connecting." Foreground="#F6C879"/>
-        <DockPanel Margin="0,6,0,0"><Button x:Name="ConnectButton" DockPanel.Dock="Right" Content="Connect" Click="ConnectClick"/><TextBox x:Name="CodexPath" ToolTip="Path to the native codex.exe executable" AutomationProperties.Name="Codex executable path"/></DockPanel>
+        <DockPanel Margin="0,6,0,0">
+          <Button x:Name="ConnectButton" DockPanel.Dock="Right" Content="Connect" Click="ConnectClick"/>
+          <Button x:Name="BrowseButton" DockPanel.Dock="Right" Content="Browse…" Click="BrowseCodexClick"/>
+          <Button x:Name="FindButton" DockPanel.Dock="Right" Content="Find Codex" Click="FindCodexClick"/>
+          <TextBox x:Name="CodexPath" ToolTip="Codex is detected automatically, including npm installs. You can also choose a native codex.exe." AutomationProperties.Name="Codex executable path"/>
+        </DockPanel>
         <CheckBox x:Name="Exclusive" Content="I grant AutoResume exclusive ownership of the selected sessions. Other clients will remain closed."/>
         <TextBlock x:Name="Connection" Text="Disconnected · scheduling is OFF until connected and revalidated" Foreground="#99ABC5"/>
       </StackPanel>

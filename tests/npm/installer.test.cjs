@@ -54,6 +54,7 @@ function fixture(t, overrides = {}) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const archive = Buffer.from('verified fixture archive');
   const metadata = structuredClone(require('../../launcher/release.json'));
+  metadata.version = '0.1.0'; // Stable fixture, independent of the production release pin.
   metadata.app.sha256 = metadata.probe.sha256 = digest(archive);
   const calls = [];
   const installer = createInstaller({ root, platform: 'win32', arch: 'x64', metadata, log() {},

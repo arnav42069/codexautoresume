@@ -25,7 +25,7 @@ public partial class App : Application
             var client = new AppServerClient();
             OwnedServerId = () => client.ProcessId;
             var scheduler = new Scheduler(client, new JsonStateStore(Path.Combine(directory, "state.json")), ownershipCheck: OtherCodexClientsAbsent);
-            var window = new MainWindow(scheduler, client);
+            var window = new MainWindow(scheduler, client, autoDetect: !selfTest);
             MainWindow = window;
             if (selfTest)
                 window.Loaded += async (_, _) => await window.SmokeCloseAsync();

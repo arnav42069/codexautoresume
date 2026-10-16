@@ -25,6 +25,7 @@ public sealed partial class AppServerClient : ICodexClient
     public async Task ConnectAsync(string executable, CancellationToken ct)
     {
         if (process != null) throw new InvalidOperationException("Already connected. Restart the utility to change its Codex executable.");
+        if (OperatingSystem.IsWindows()) executable = CodexExecutableResolver.Resolve(executable);
         var versionInfo = NewProcess(executable);
         versionInfo.ArgumentList.Add("--version");
         using (var version = Process.Start(versionInfo) ?? throw new IOException("Cannot launch Codex."))
@@ -44,7 +45,7 @@ public sealed partial class AppServerClient : ICodexClient
         // Drain stderr to avoid a blocked child. Never expose configuration or credential output.
         _ = DrainErrorsAsync(process.StandardError);
         reader = ReadLoopAsync();
-        await CallAsync("initialize", new { clientInfo = new { name = "codex_autoresume", title = "Codex AutoResume", version = "1.0.0" } }, ct);
+        await CallAsync("initialize", new { clientInfo = new { name = "codex_autoresume", title = "Codex AutoResume", version = "0.1.1" } }, ct);
         await WriteAsync(new { method = "initialized", @params = new { } }, ct);
     }
 

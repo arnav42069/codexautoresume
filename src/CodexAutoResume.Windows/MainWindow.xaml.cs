@@ -20,7 +20,7 @@ public partial class MainWindow : Window
     private AppState state;
     private bool exiting, busy;
 
-    public MainWindow(Scheduler scheduler, AppServerClient client)
+    public MainWindow(Scheduler scheduler, AppServerClient client, bool autoDetect = true)
     {
         this.scheduler = scheduler; this.client = client; state = scheduler.Snapshot;
         InitializeComponent();
@@ -41,6 +41,8 @@ public partial class MainWindow : Window
         clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         clock.Tick += (_, _) => { foreach (var row in rows) row.RefreshClock(); };
         clock.Start(); Render(state);
+        if (autoDetect && CodexExecutableResolver.IsAutomatic(CodexPath.Text))
+            Loaded += async (_, _) => await FindCodexAsync(showMissing: false);
     }
 
     private void Render(AppState next)
@@ -81,16 +83,64 @@ public partial class MainWindow : Window
     }
     private async void ConnectClick(object sender, RoutedEventArgs e) => await Run(async () =>
     {
-        ConnectButton.IsEnabled = false;
+        ConnectButton.IsEnabled = FindButton.IsEnabled = BrowseButton.IsEnabled = CodexPath.IsEnabled = Exclusive.IsEnabled = false;
         Connection.Text = "Connecting and revalidating…";
         try
         {
-            await scheduler.ConnectAsync(CodexPath.Text.Trim(), Exclusive.IsChecked == true);
+            if (Exclusive.IsChecked != true)
+            {
+                Connection.Text = "Finish active Codex work, close Desktop and other clients, then tick the exclusive ownership checkbox.";
+                return;
+            }
+            var selected = CodexPath.Text;
+            var executable = await Task.Run(() => CodexExecutableResolver.Resolve(selected));
+            CodexPath.Text = executable;
+            await scheduler.ConnectAsync(executable, exclusiveOwnership: true);
             Connection.Text = $"Connected · {client.Version} · owned app-server";
             CodexPath.IsEnabled = Exclusive.IsEnabled = false;
         }
-        catch { Connection.Text = "Connection failed. Resolve the error; restart AutoResume if the server was launched."; ConnectButton.IsEnabled = client.ProcessId == null; throw; }
+        catch (Exception ex)
+        {
+            Connection.Text = ex.Message + (client.ProcessId != null ? " Restart AutoResume before reconnecting." : "");
+        }
+        finally
+        {
+            ConnectButton.IsEnabled = FindButton.IsEnabled = BrowseButton.IsEnabled = CodexPath.IsEnabled = Exclusive.IsEnabled = client.ProcessId == null;
+        }
     });
+
+    private async Task FindCodexAsync(bool showMissing) => await Run(async () =>
+    {
+        FindButton.IsEnabled = BrowseButton.IsEnabled = ConnectButton.IsEnabled = false;
+        var previous = CodexPath.Text;
+        Connection.Text = "Looking for the native Codex CLI…";
+        try
+        {
+            var found = await Task.Run(() => CodexExecutableResolver.Find());
+            if (CodexPath.Text != previous) { Connection.Text = "Using the path you entered. Confirm exclusive ownership, then connect."; return; }
+            if (found != null)
+            {
+                CodexPath.Text = found;
+                Connection.Text = "Codex found. Finish active work, close Desktop and other clients, then confirm exclusive ownership and connect.";
+            }
+            else Connection.Text = showMissing
+                ? "Codex CLI was not found. Install it and sign in, then use Find Codex or Browse to select codex.exe."
+                : "Select Find Codex or Browse. Close Desktop and confirm exclusive ownership before connecting.";
+        }
+        finally { FindButton.IsEnabled = BrowseButton.IsEnabled = ConnectButton.IsEnabled = client.ProcessId == null; }
+    });
+
+    private async void FindCodexClick(object sender, RoutedEventArgs e) => await FindCodexAsync(showMissing: true);
+    private void BrowseCodexClick(object sender, RoutedEventArgs e)
+    {
+        if (busy || client.ProcessId != null) return;
+        var picker = new OpenFileDialog { Title = "Choose the native Codex CLI", Filter = "Codex executable (codex.exe)|codex.exe|Windows executables (*.exe)|*.exe", CheckFileExists = true };
+        if (picker.ShowDialog(this) == true)
+        {
+            CodexPath.Text = picker.FileName;
+            Connection.Text = "Executable selected. Close Desktop and other clients, confirm exclusive ownership, then connect.";
+        }
+    }
     private async void ToggleClick(object sender, RoutedEventArgs e) => await Run(async () => { await scheduler.SetEnabledAsync(!state.Enabled); await scheduler.TickAsync(); });
     private async void AddClick(object sender, RoutedEventArgs e) => await Run(async () =>
     {
