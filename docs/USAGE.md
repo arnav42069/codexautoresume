@@ -8,9 +8,9 @@ A compact .NET 8 desktop utility for Windows, Linux and macOS for continuing up 
 
 ## Install and run
 
-1. Extract your platform ZIP into a stable user location. Open `CodexAutoResume.exe` on Windows, `CodexAutoResume` on Linux, or `CodexAutoResume.app` on macOS. First launch creates a desktop shortcut. The executable is self-contained; .NET does not need to be installed. This build is unsigned. The native runtime extracts to the user's temporary directory on first launch.
-2. Install the native Codex CLI and Git. Protocol validation used **codex-cli 0.159.2**; older versions may lack required fields and fail closed. Sign in through Codex's normal supported flow. AutoResume never reads or stores authentication files or keys.
-3. Launch AutoResume. It finds the native CLI automatically, including npm installs and Unix symlinks. Use **Find Codex** to search again or **Browse** for a custom installation. Close Desktop and other Codex clients, confirm exclusive ownership, then connect. The server inherits your existing environment and Codex configuration, including `CODEX_HOME` when set.
+1. Extract your platform ZIP into a stable user location. Open `CodexAutoResume.exe` on Windows, `CodexAutoResume` on Linux, or `CodexAutoResume.app` on macOS. First launch creates a desktop shortcut. The executable is self-contained; .NET does not need to be installed. Windows and Linux builds are unsigned; macOS builds are ad-hoc signed, not notarized. Embedded native libraries extract to .NET's per-user bundle cache on first launch.
+2. Install the native Codex CLI and Git. Read-only protocol validation used **codex-cli 0.159.2** on Linux and **0.163.0** in Windows CI; older versions may lack required fields and fail closed. Sign in through Codex's normal supported flow. AutoResume never reads or stores authentication files or keys.
+3. Launch AutoResume. It finds the native CLI automatically, including npm installs and Unix symlinks. On Windows, the detected native path and version appear in **Connection & Settings**; use **Re-detect** to search again or **Browse** for a manual override. Linux/macOS retain **Find Codex**. Finish active work and close Desktop and other Codex clients before connecting. The server inherits your existing environment and Codex configuration, including `CODEX_HOME` when set.
 4. Confirm exclusive ownership and click **Connect**. This starts `codex app-server --listen stdio://`, initializes the protocol, and revalidates saved sessions. No continuation is sent during connection.
 5. Click **+ Add conversation**. Select a session returned by `thread/list` or enter its exact UUID. Confirm the title, UUID and workspace. Only sessions accessible to that Codex installation/account/home are discoverable. Sessions require an existing local Git workspace without symlinks or junctions. Identity mismatches, changed workspaces and missing repositories block execution.
 6. Arrange priority with ↑ / ↓. **☆ Sequential** uses the single sequential lane; **★ Parallel** permits concurrent execution in independent repositories. Conflicting repositories, including worktrees sharing a Git common directory, and nested workspaces are serialized. An active execution's lane cannot change.
@@ -41,7 +41,7 @@ Supported events update state immediately. Read-only reconciliation runs every 3
 
 ## Tray, reboot and recovery
 
-- Closing or minimizing hides the window to the tray; the watcher continues. Tray actions open the window, pause/resume scheduling, or exit. Notifications report resumes, limits, completions and intervention.
+- On Windows, closing or minimizing hides the window to the tray by default; change either behavior in **Connection & Settings**. Linux/macOS behavior is described below. Tray actions open the window, pause/resume scheduling, or exit. Notifications report resumes, limits, completions and intervention.
 - Turning **OFF**, or pausing a row, stops future dispatches without interrupting active work. Explicit exit is blocked while work is active or journal delivery is uncertain. OS termination is treated as a possible crash on restart.
 - **Start with Windows** registers the current executable in the current user's `Run` registry key with `--tray`. Uncheck it before moving/deleting the executable. Queue, prompts, statuses and preferences survive reboot; scheduling starts OFF and requires connection and exclusive-ownership confirmation again. This prevents unattended takeover of Desktop sessions after reboot.
 - A successful completion never triggers another prompt automatically. Approval/input requests are declined or rejected; AutoResume grants no permissions and does not change sandbox policy. The model may finish its existing turn after a denial; the row remains Needs Attention until reviewed.
@@ -62,7 +62,7 @@ dotnet run --project tests/CodexAutoResume.Tests -c Release
 
 The dependency-free executable test runner prints each test and returns nonzero on failure. `dotnet test` is not the entry point. It covers scheduling, conflicts, rate recovery/backoff, identity, journaling, crash uncertainty, duplicates, event isolation, approvals, persistence and a real subprocess JSON-RPC fixture.
 
-`scripts/build.ps1` publishes a self-contained single-file `win-x64` executable, checks native WPF/tray startup on Windows using `--self-test`, and produces `artifacts/CodexAutoResume-win-x64.zip`. Use `-Runtime win-arm64` on a matching Windows ARM64 machine. The UI startup check never connects to Codex or submits a prompt. GitHub Actions runs the Windows build, tests and startup check and retains the ZIP.
+`scripts/build.ps1` publishes a self-contained single-file `win-x64` executable, checks native WPF/tray startup on Windows using `--self-test`, and produces `artifacts/CodexAutoResume-win-x64.zip`. Use `-Runtime win-arm64` on a matching Windows ARM64 machine. The Windows UI check connects only to a local protocol fixture, renders the main dashboard states and submits no model turns. Windows CI separately discovers the official CLI automatically and checks read-only app-server initialization/listing in an isolated Codex home. GitHub Actions retains the ZIP and UI screenshots.
 
 Linux can run the portable core/tests and cross-publish Windows:
 
@@ -77,13 +77,13 @@ dotnet publish src/CodexAutoResume.Windows -c Release -r win-x64 --self-containe
 Optional read-only real app-server initialization/discovery, and local schema verification:
 
 ```powershell
-dotnet run --project tests/CodexAutoResume.Tests -c Release -- --live-smoke C:\path\to\codex.exe
+dotnet run --project tests/CodexAutoResume.Tests -c Release -- --live-smoke
 ./scripts/verify-codex.ps1 -Codex C:\path\to\codex.exe
 ```
 
 ## Validation boundary
 
-This development host is Linux. Core/transport tests, read-only app-server initialization/discovery, compilation and Windows cross-publication are checked here. WPF rendering, tray behavior, Windows startup, authenticated resumptions, real resets and Desktop visibility require Windows/user-account validation and are not claimed to work based on these checks. No real continuation prompts were submitted. See [Windows acceptance checks](WINDOWS-VALIDATION.md).
+This development host is Linux. Local core/transport tests and read-only real app-server discovery passed. Native CI also passed Windows WPF rendering, theme preview and fixture connection checks, plus build/install/window checks for Linux x64/ARM64 and macOS Intel/Apple Silicon. Actual user-history resumptions, physical-monitor DPI/accessibility behavior, Windows login startup and real rate resets still require checks on the user's machine. Desktop UI synchronization remains unsupported. No real continuation prompts were submitted. See [Windows acceptance checks](WINDOWS-VALIDATION.md).
 
 ## Platform behavior
 

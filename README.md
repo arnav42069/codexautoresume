@@ -13,7 +13,7 @@ A desktop app that resumes interrupted Codex work when usage is available again.
 - Queue up to five existing conversations.
 - Set priorities or run independent repositories in parallel.
 - See live status, elapsed time and verified reset estimates.
-- Windows: a compact Phosphor dashboard with saved accent colors.
+- Windows: a Phosphor dashboard with saved colors and reduced motion. The pink is a preview.
 - Keep your queue across restarts. Review uncertain attempts before retrying.
 
 Completed work stays completed. Switching **OFF** stops future continuations while active work finishes.
@@ -33,11 +33,21 @@ npm install -g --foreground-scripts https://github.com/arnav42069/codexautoresum
 Open **Codex AutoResume** from your new desktop shortcut, or run `codexautoresume`.
 The installer checks the release checksum. .NET is included.
 
-Prefer a ZIP? Get your platform from [Releases](https://github.com/arnav42069/codexautoresume/releases/latest), extract it somewhere permanent and open the app. First launch creates the shortcut too.
+Prefer a ZIP? Download v0.2.2, extract it somewhere permanent and open the app. No Node.js or .NET installation is needed for the ZIP. First launch creates the shortcut.
 
-Windows x64 · Linux x64/ARM64 with X11 or XWayland · macOS 12+ on Intel or Apple Silicon.
+| Platform | Download |
+| --- | --- |
+| Windows | [x64](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-win-x64.zip) |
+| Linux | [x64](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-linux-x64.zip) · [ARM64](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-linux-arm64.zip) |
+| macOS | [Intel](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-osx-x64.zip) · [Apple Silicon](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-osx-arm64.zip) |
 
-Codex is detected automatically. Close other Codex clients, confirm ownership, connect and add your verified sessions.
+Linux needs X11 or XWayland. macOS needs version 12+; builds are ad-hoc signed, not notarized.
+
+1. Let active Codex work finish, then close Desktop and other Codex clients.
+2. Open AutoResume. Codex is detected automatically; use **Re-detect** on Windows or **Find Codex** on Linux/macOS if needed.
+3. Confirm exclusive ownership, connect, add your verified conversations and switch **ON**.
+
+**ON** controls scheduling. The watcher panel shows whether the connection is actually ready.
 
 On Windows, closing the window keeps it in the tray by default; change this in settings. On Linux, minimize to keep it running; closing exits once work is settled. macOS also has a menu-bar icon.
 

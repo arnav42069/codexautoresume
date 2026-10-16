@@ -17,10 +17,10 @@ It also describes history/path overrides that can take precedence over the reque
 1. Let active Desktop work finish, or resolve it manually in Desktop. Record the original UUID(s) of one to five intended Desktop conversations. Do not create test replacements and do not use `--last`.
 2. Close Desktop, AutoResume, and other Codex clients completely. Keep them closed throughout the diagnostic. Closing a window must not leave its process/background work running. Do not terminate active work just to make this check pass.
 3. Use the native Codex CLI (`codex.exe` on Windows, `codex` on Linux/macOS) and existing authentication/configuration/home that can access those conversations. The tool does not copy credentials, edit configuration, inspect private Desktop databases, or override `CODEX_HOME`. If the selected CLI cannot access that history, the check fails rather than trying another identity or making a new thread.
-4. Extract the self-contained Windows diagnostic and run in PowerShell, replacing the executable path and UUIDs:
+4. Extract the self-contained Windows diagnostic and run in PowerShell, replacing the UUID:
 
 ```powershell
-./CodexAutoResume.Probe.exe --codex C:\path\to\codex.exe --desktop-closed ORIGINAL-DESKTOP-UUID --output desktop-continuity.json
+./CodexAutoResume.Probe.exe --desktop-closed ORIGINAL-DESKTOP-UUID --output desktop-continuity.json
 ```
 
 Add up to four more original UUIDs before `--output`. Existing report files are never overwritten; select another filename for subsequent checks. Git and a .NET installation are not required for the self-contained diagnostic.
@@ -28,7 +28,7 @@ Add up to four more original UUIDs before `--output`. Existing report files are 
 The source can also run with the .NET 8 SDK:
 
 ```powershell
-dotnet run --project tools/CodexAutoResume.Probe -c Release -- --codex C:\path\to\codex.exe --desktop-closed ORIGINAL-DESKTOP-UUID --output desktop-continuity.json
+dotnet run --project tools/CodexAutoResume.Probe -c Release -- --desktop-closed ORIGINAL-DESKTOP-UUID --output desktop-continuity.json
 ```
 
 Version 0.2 provides a matching diagnostic for every supported platform. On Linux/macOS, run `./CodexAutoResume.Probe --desktop-closed ORIGINAL-DESKTOP-UUID`, or use `codexautoresume verify ORIGINAL-DESKTOP-UUID --desktop-closed` on any platform. Native CLI detection is automatic; `--codex` is an optional override. Subprocess fixture success is not reported as real Desktop success.

@@ -53,6 +53,8 @@ download. Connections time out after 20 seconds; a stalled transfer stops after
 needs longer, use the ZIP link printed by the installer in your browser.
 Close the tray app and reinstall if existing program files are damaged.
 
+For browser downloads, use the [release page](https://github.com/arnav42069/codexautoresume/releases/latest) or the GitHub links in the README. Redirected `release-assets.githubusercontent.com` URLs expire; reopen the original GitHub link to get a fresh download.
+
 If your npm policy disables lifecycle scripts, install the payload explicitly:
 
 ```powershell
