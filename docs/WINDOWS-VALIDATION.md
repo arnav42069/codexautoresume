@@ -1,6 +1,6 @@
 # Windows acceptance checks
 
-These checks require Windows and a disposable local Git workspace with the user's authenticated native Codex CLI. They were not run on this Linux host. Use harmless tasks and review the existing Codex configuration before permitting real execution.
+The manual execution checks below require Windows and a disposable local Git workspace with the user's authenticated native Codex CLI. Native build, discovery, appearance and fixture connection checks run separately in Windows CI; manual user-history checks were not run on this Linux host. Use harmless tasks and review the existing Codex configuration before permitting real execution.
 
 1. Run `scripts/build.ps1`. Confirm automated tests and native WPF/tray startup (`--self-test`) succeed. The startup check connects only to a local protocol fixture, renders the main states and saves screenshots; no model turns are submitted. CI separately discovers and initializes the official CLI in an isolated Codex home.
 2. Launch the published executable. Check keyboard navigation, six badge colors, running pulse, summary and log at 100% and 150% scaling. Minimize/close to tray and restore. Notification policy may suppress balloons.

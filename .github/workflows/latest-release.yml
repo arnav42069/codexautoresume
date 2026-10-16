@@ -1,0 +1,37 @@
+name: Keep latest release aligned with installer
+on:
+  push:
+    branches: [main]
+    paths: ['launcher/release.json', '.github/workflows/latest-release.yml']
+  workflow_run:
+    workflows: ['Release desktop builds']
+    types: [completed]
+permissions:
+  contents: write
+concurrency:
+  group: latest-desktop-release
+  cancel-in-progress: false
+jobs:
+  latest:
+    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Promote the pinned release only when it is the newest stable version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import json, re, subprocess
+          pinned='v'+json.load(open('launcher/release.json'))['version']
+          def version(tag):
+              return tuple(map(int,tag[1:].split('.'))) if re.fullmatch(r'v\d+\.\d+\.\d+',tag) else None
+          releases=json.loads(subprocess.check_output(['gh','release','list','--limit','100','--json','tagName,isDraft,isPrerelease']))
+          stable=[r['tagName'] for r in releases if not r['isDraft'] and not r['isPrerelease'] and version(r['tagName'])]
+          if pinned in stable and version(pinned)==max(map(version,stable)):
+              subprocess.run(['gh','release','edit',pinned,'--latest'],check=True)
+              print('Latest release verified:',pinned)
+          else:
+              print('No promotion: installer does not pin the newest published stable release.')

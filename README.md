@@ -8,6 +8,8 @@
 
 A desktop app that resumes interrupted Codex work when usage is available again.
 
+![Windows Phosphor dashboard with sample conversations](https://github.com/arnav42069/codexautoresume/releases/download/v0.2.2/CodexAutoResume-Phosphor.png)
+
 - Queue up to five existing conversations.
 - Set priorities or run independent repositories in parallel.
 - See live status, elapsed time and verified reset estimates.
