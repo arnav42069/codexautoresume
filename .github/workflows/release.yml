@@ -19,6 +19,8 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/build.ps1
+          Copy-Item artifacts/ui-screenshots/05-queue-statuses.png artifacts/CodexAutoResume-Phosphor.png
+          Copy-Item artifacts/ui-screenshots/01-empty.png artifacts/CodexAutoResume-Phosphor-empty.png
           dotnet publish tools/CodexAutoResume.Probe -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o artifacts/desktop-probe-win-x64
@@ -32,6 +34,7 @@ jobs:
           path: |
             artifacts/CodexAutoResume-win-x64.zip
             artifacts/CodexAutoResume-DesktopProbe-win-x64.zip
+            artifacts/CodexAutoResume-Phosphor*.png
   publish:
     needs: [windows, platforms]
     runs-on: ubuntu-latest
@@ -50,7 +53,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" artifacts/*.zip artifacts/SHA256SUMS.txt artifacts/npm-manifest.json \
+          gh release create "$GITHUB_REF_NAME" artifacts/*.zip artifacts/*.png artifacts/SHA256SUMS.txt artifacts/npm-manifest.json \
             --repo "$GITHUB_REPOSITORY" --verify-tag --draft --title "Codex AutoResume $GITHUB_REF_NAME" \
             --notes-file "docs/releases/$GITHUB_REF_NAME.md"
           gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest

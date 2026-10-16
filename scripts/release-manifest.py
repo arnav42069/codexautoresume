@@ -17,5 +17,7 @@ for platform,rid in [('win32-x64','win-x64'),('linux-x64','linux-x64'),('linux-a
         if rid.startswith('win-'):components[kind]['subsystem']=2 if kind=='app' else 3
         if kind=='app':components[kind]['desktopShortcut']=True
     manifest['platforms'][platform]=components
+for file in sorted(directory.glob('CodexAutoResume-Phosphor*.png')):
+    checks.append(f'{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.name}')
 (directory/'SHA256SUMS.txt').write_text('\n'.join(checks)+'\n')
 (directory/'npm-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
