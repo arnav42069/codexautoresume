@@ -11,7 +11,7 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        if (args.Contains("--version")) { Console.WriteLine("0.2.0"); return 0; }
+        if (args.Contains("--version")) { Console.WriteLine("0.2.1"); return 0; }
         if (args.Contains("--create-shortcut") || args.Contains("--ensure-shortcut"))
         {
             try { Console.WriteLine(DesktopIntegration.CreateShortcut(Environment.ProcessPath!, force: args.Contains("--create-shortcut"))); return 0; }

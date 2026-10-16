@@ -6,6 +6,17 @@
    <Setter Property="Background" Value="{DynamicResource Background}"/><Setter Property="Foreground" Value="{DynamicResource Text}"/>
    <Setter Property="UseLayoutRounding" Value="True"/><Setter Property="SnapsToDevicePixels" Value="True"/>
   </Style>
+  <Style TargetType="ScrollBar">
+   <Setter Property="Width" Value="10"/><Setter Property="Background" Value="{DynamicResource Background}"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar">
+    <Grid Background="{TemplateBinding Background}"><Track x:Name="PART_Track" IsDirectionReversed="True" Orientation="{TemplateBinding Orientation}" Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}" Value="{TemplateBinding Value}" ViewportSize="{TemplateBinding ViewportSize}">
+     <Track.DecreaseRepeatButton><RepeatButton x:Name="Before" Command="{x:Static ScrollBar.PageUpCommand}" Opacity="0" Focusable="False"/></Track.DecreaseRepeatButton>
+     <Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="{DynamicResource Border}" CornerRadius="3" Margin="2"/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
+     <Track.IncreaseRepeatButton><RepeatButton x:Name="After" Command="{x:Static ScrollBar.PageDownCommand}" Opacity="0" Focusable="False"/></Track.IncreaseRepeatButton>
+    </Track></Grid><ControlTemplate.Triggers><Trigger Property="Orientation" Value="Horizontal"><Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/><Setter TargetName="Before" Property="Command" Value="{x:Static ScrollBar.PageLeftCommand}"/><Setter TargetName="After" Property="Command" Value="{x:Static ScrollBar.PageRightCommand}"/></Trigger></ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+   <Style.Triggers><Trigger Property="Orientation" Value="Horizontal"><Setter Property="Height" Value="10"/><Setter Property="Width" Value="Auto"/></Trigger></Style.Triggers>
+  </Style>
   <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style>
   <Style x:Key="Caption" TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource Secondary}"/><Setter Property="FontSize" Value="11"/><Setter Property="FontFamily" Value="Consolas"/><Setter Property="Margin" Value="0,0,0,6"/></Style>
   <Style x:Key="Panel" TargetType="Border"><Setter Property="Background" Value="{DynamicResource Surface}"/><Setter Property="BorderBrush" Value="{DynamicResource Border}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="14"/><Setter Property="CornerRadius" Value="5"/><Setter Property="Margin" Value="0,0,0,10"/></Style>
@@ -35,7 +46,7 @@
   <Style TargetType="ListBoxItem"><Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="Padding" Value="6"/><Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{DynamicResource AccentHover}"/></Trigger></Style.Triggers></Style>
   <Style TargetType="ComboBox"><Setter Property="MinHeight" Value="30"/><Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="Background" Value="{DynamicResource Elevated}"/><Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox"><Grid>
-    <ToggleButton Background="{DynamicResource Elevated}" Foreground="{DynamicResource Text}" BorderBrush="{DynamicResource Border}" Padding="8" HorizontalContentAlignment="Stretch" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" Focusable="False"><DockPanel><TextBlock Text="⌄" DockPanel.Dock="Right" Margin="10,0,0,0"/><ContentPresenter Content="{TemplateBinding SelectionBoxItem}"/></DockPanel></ToggleButton>
+    <ToggleButton Background="{DynamicResource Elevated}" Foreground="{DynamicResource Text}" BorderBrush="{DynamicResource Border}" Padding="8" HorizontalContentAlignment="Stretch" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" Focusable="False"><ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" Padding="{TemplateBinding Padding}" CornerRadius="3"><ContentPresenter/></Border></ControlTemplate></ToggleButton.Template><DockPanel><TextBlock Text="⌄" DockPanel.Dock="Right" Margin="10,0,0,0"/><ContentPresenter Content="{TemplateBinding SelectionBoxItem}"/></DockPanel></ToggleButton>
     <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False"><Border Background="{DynamicResource Elevated}" BorderBrush="{DynamicResource Border}" BorderThickness="1" MinWidth="180"><ScrollViewer MaxHeight="250"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer></Border></Popup>
    </Grid><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource AccentText}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
   </Style>

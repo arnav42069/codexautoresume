@@ -13,6 +13,8 @@ public partial class MainWindow
     {
         void Assert(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
         Directory.CreateDirectory(outputDirectory);
+        Assert(Background is SolidColorBrush background && background.Color == (Color)ColorConverter.ConvertFromString(ThemePalette.Background), "Main window did not apply the Phosphor background.");
+        Assert(Foreground is SolidColorBrush foreground && foreground.Color == (Color)ColorConverter.ConvertFromString(ThemePalette.Text), "Main window did not inherit readable Phosphor text.");
         async Task Capture(string name)
         {
             await Task.Delay(180); UpdateLayout();

@@ -9,7 +9,7 @@
     <AssemblyName>CodexAutoResume</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>../../assets/icon.ico</ApplicationIcon>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../CodexAutoResume.Core/CodexAutoResume.Core.csproj" /></ItemGroup>
 </Project>
