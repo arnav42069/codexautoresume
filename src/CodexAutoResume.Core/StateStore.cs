@@ -27,6 +27,8 @@ public sealed class JsonStateStore(string path) : IStateStore
                  !state.Conversations.Any(c => c.Id == a.ThreadId && c.AttemptId == a.Id))) ||
             state.Attempts.Select(a => a.Id).Distinct().Count() != state.Attempts.Count)
             throw new InvalidDataException("Invalid or unsupported state file. Scheduling is disabled.");
+        if (state.Appearance == null || !ThemePalette.TryNormalize(state.Appearance.Accent, out _))
+            state.Appearance = new AppearanceSettings();
         return state;
     }
 

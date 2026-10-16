@@ -26,17 +26,7 @@ public sealed partial class AppServerClient : ICodexClient
     {
         if (process != null) throw new InvalidOperationException("Already connected. Restart the utility to change its Codex executable.");
         executable = CodexExecutableResolver.Resolve(executable);
-        var versionInfo = NewProcess(executable);
-        versionInfo.ArgumentList.Add("--version");
-        using (var version = Process.Start(versionInfo) ?? throw new IOException("Cannot launch Codex."))
-        {
-            var output = version.StandardOutput.ReadToEndAsync(ct);
-            var errors = version.StandardError.ReadToEndAsync(ct);
-            await version.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromSeconds(15), ct);
-            Version = (await output).Trim();
-            await errors;
-            if (version.ExitCode != 0) throw new IOException("codex --version failed. Install the native Codex CLI and sign in separately.");
-        }
+        Version = (await CodexDiscovery.ValidateAsync(executable, ct)).Version;
         var info = NewProcess(executable);
         info.ArgumentList.Add("app-server");
         info.ArgumentList.Add("--listen");

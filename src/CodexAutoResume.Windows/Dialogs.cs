@@ -17,7 +17,7 @@ internal static class Dialogs
         var uuid = new TextBox(); bottom.Children.Add(uuid);
         var select = new Button { Content = "Verify selection", HorizontalAlignment = HorizontalAlignment.Right, IsDefault = true };
         bottom.Children.Add(select); panel.Children.Add(bottom);
-        var list = new ListBox { Background = System.Windows.Media.Brushes.WhiteSmoke };
+        var list = new ListBox();
         foreach (var thread in threads)
             list.Items.Add(new ListBoxItem { Content = $"{thread.Name}\n{thread.Id}\n{thread.Workspace}", Tag = thread.Id, Padding = new Thickness(6) });
         list.SelectionChanged += (_, _) => { if (list.SelectedItem is ListBoxItem item) uuid.Text = (string)item.Tag; };

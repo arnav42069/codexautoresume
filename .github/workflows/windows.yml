@@ -70,9 +70,25 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.426'
+      - name: Check automatic discovery and read-only connection to the official Codex CLI
+        shell: pwsh
+        run: |
+          $prefix = Join-Path $env:RUNNER_TEMP 'official-codex-discovery'
+          npm install --global --prefix $prefix @openai/codex@0.163.0
+          if ($LASTEXITCODE -ne 0) { throw 'Official Codex installation failed' }
+          $env:PATH = $prefix + ';' + $env:PATH
+          $env:CODEX_HOME = Join-Path $env:RUNNER_TEMP 'codex-read-only-smoke'
+          New-Item -ItemType Directory -Path $env:CODEX_HOME -Force | Out-Null
+          python scripts/ci-run.py dotnet run --project tests/CodexAutoResume.Tests -c Release -- --live-smoke
+          if ($LASTEXITCODE -ne 0) { throw 'Automatic official Codex discovery/initialization failed' }
       - name: Test, publish, and check native UI startup
         shell: pwsh
         run: ./scripts/build.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Windows-Phosphor-screenshots
+          path: artifacts/ui-screenshots/*.png
       - uses: actions/upload-artifact@v4
         with:
           name: CodexAutoResume-win-x64

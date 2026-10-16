@@ -23,6 +23,7 @@ public static class CodexExecutableResolver
             if (IsNative(selected, platform))
                 return Path.GetFullPath(selected);
             if (platform == "win32" && Path.GetExtension(selected).ToLowerInvariant() is not (".cmd" or ".ps1" or ".bat")) return null;
+            if (platform != "win32" && Path.GetFileName(selected) is not ("codex" or "codex.js")) return null;
             return FindInDirectory(Path.GetDirectoryName(Path.GetFullPath(selected))!, platform);
         }
 
@@ -76,7 +77,7 @@ public static class CodexExecutableResolver
         return null;
     }
 
-    private static IEnumerable<string> DefaultDirectories()
+    internal static IEnumerable<string> DefaultDirectories()
     {
         foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator))
             yield return directory;
@@ -114,9 +115,13 @@ public static class CodexExecutableResolver
     private static bool IsNative(string path, string platform)
     {
         if (!File.Exists(path)) return false;
-        if (platform == "win32") return Path.GetExtension(path).Equals(".exe", StringComparison.OrdinalIgnoreCase);
         try
         {
+            if (platform == "win32")
+            {
+                using var pe = new System.Reflection.PortableExecutable.PEReader(File.OpenRead(path));
+                return pe.PEHeaders.PEHeader != null && pe.PEHeaders.CoffHeader.Characteristics.HasFlag(System.Reflection.PortableExecutable.Characteristics.ExecutableImage);
+            }
             if (!OperatingSystem.IsWindows() && (File.GetUnixFileMode(path) & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) == 0) return false;
             using var file = File.OpenRead(path); var header = new byte[4];
             if (file.Read(header) != 4) return false;
@@ -124,6 +129,7 @@ public static class CodexExecutableResolver
             return platform == "linux" ? magic == "7F454C46" : magic is "CFFAEDFE" or "FEEDFACF" or "CAFEBABE" or "BEBAFECA";
         }
         catch (IOException) { return false; }
+        catch (BadImageFormatException) { return false; }
         catch (UnauthorizedAccessException) { return false; }
     }
 

@@ -160,6 +160,17 @@ public sealed class Scheduler : IAsyncDisposable
         state.StartWithWindows = startWithWindows; Commit(); return Task.CompletedTask;
     }, ct);
 
+    public Task SaveExecutableAsync(string path, CancellationToken ct = default) => InGateAsync(() =>
+    {
+        state.CodexPath = path; Commit(); return Task.CompletedTask;
+    }, ct);
+
+    public Task SaveAppearanceAsync(AppearanceSettings appearance, CancellationToken ct = default) => InGateAsync(() =>
+    {
+        if (!ThemePalette.TryNormalize(appearance.Accent, out var accent)) throw new ArgumentException("Enter a HEX color in #RRGGBB format.");
+        state.Appearance = appearance with { Accent = accent }; Commit(); return Task.CompletedTask;
+    }, ct);
+
     public async Task<AppState> GetSnapshotAsync(CancellationToken ct = default)
     {
         AppState? snapshot = null;

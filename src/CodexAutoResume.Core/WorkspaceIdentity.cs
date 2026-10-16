@@ -8,7 +8,7 @@ public static class WorkspaceIdentity
     {
         if (!Path.IsPathFullyQualified(cwd) || !Directory.Exists(cwd))
             throw new IOException("The conversation workspace is missing or is not an absolute local path.");
-        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(cwd));
+        var full = PhysicalSystemPath(Path.TrimEndingDirectorySeparator(Path.GetFullPath(cwd)));
         RejectReparsePoints(full);
         // Fail closed if Git cannot establish the common directory. Shared worktrees are
         // intentionally serialized too; no repository files or worktrees are created.
@@ -26,9 +26,21 @@ public static class WorkspaceIdentity
         await stderr;
         if (p.ExitCode != 0 || !Path.IsPathFullyQualified(output))
             throw new IOException("A Git workspace is required for reliable conflict detection.");
-        var resolved = new DirectoryInfo(output).ResolveLinkTarget(true)?.FullName ?? output;
+        var resolved = PhysicalSystemPath(new DirectoryInfo(output).ResolveLinkTarget(true)?.FullName ?? output);
         RejectReparsePoints(resolved);
         return Path.TrimEndingDirectorySeparator(Path.GetFullPath(resolved));
+    }
+
+    private static string PhysicalSystemPath(string path)
+    {
+        if (!OperatingSystem.IsMacOS()) return path;
+        // macOS owns these fixed root aliases. Resolve only their known protected
+        // destinations; user-created project symlinks remain forbidden below.
+        foreach (var alias in new[] { "/var", "/tmp", "/etc" })
+            if ((path == alias || path.StartsWith(alias + "/", StringComparison.Ordinal)) &&
+                new DirectoryInfo(alias).ResolveLinkTarget(true)?.FullName == "/private" + alias)
+                return "/private" + path;
+        return path;
     }
 
     private static void RejectReparsePoints(string path)

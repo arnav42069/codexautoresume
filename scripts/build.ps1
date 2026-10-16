@@ -10,9 +10,20 @@ try {
         -o "artifacts/$Runtime"
     if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
     if ($IsWindows -or $env:OS -eq 'Windows_NT') {
-        $process = Start-Process -FilePath "$PWD/artifacts/$Runtime/CodexAutoResume.exe" -ArgumentList '--self-test' -PassThru
-        if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Windows UI startup check timed out.' }
-        if ($process.ExitCode -ne 0) { throw "Windows UI startup check failed: $($process.ExitCode)" }
+        $fixture = Join-Path $PWD 'artifacts/ui-codex-fixture'
+        New-Item -ItemType Directory -Path $fixture -Force | Out-Null
+        Copy-Item 'tests/CodexAutoResume.Tests/bin/Release/net8.0/*' -Destination $fixture -Recurse -Force
+        Copy-Item (Join-Path $fixture 'CodexAutoResume.Tests.exe') (Join-Path $fixture 'codex.exe') -Force
+        $smokeArgs = @('--self-test', '--fixture-directory', ('"' + $fixture + '"'), '--screenshots', ('"' + $PWD + '/artifacts/ui-screenshots"'))
+        $process = Start-Process -FilePath "$PWD/artifacts/$Runtime/CodexAutoResume.exe" -ArgumentList $smokeArgs -PassThru
+        if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Windows UI startup check timed out.' }
+        if ($process.ExitCode -ne 0) {
+            $errorPath = "$PWD/artifacts/$Runtime/ui-smoke-error.txt"
+            $detail = if (Test-Path $errorPath) { Get-Content $errorPath -Raw } else { 'No managed exception report.' }
+            $escaped = $detail.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=WPF smoke test::$escaped"
+            throw "Windows UI startup check failed: $($process.ExitCode): $detail"
+        }
     }
     Copy-Item README.md, LICENSE -Destination "artifacts/$Runtime"
     '@echo off', '"%~dp0CodexAutoResume.exe" --create-shortcut' | Set-Content "artifacts/$Runtime/Create desktop shortcut.cmd" -Encoding ascii

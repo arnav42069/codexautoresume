@@ -6,6 +6,15 @@ namespace CodexAutoResume.Windows;
 
 public partial class App : Application
 {
+    private void ButtonHoverEnter(object sender, System.Windows.Input.MouseEventArgs e) => Hover(sender, 1);
+    private void ButtonHoverLeave(object sender, System.Windows.Input.MouseEventArgs e) => Hover(sender, 0);
+    private static void Hover(object sender, double opacity)
+    {
+        if (sender is not System.Windows.Controls.Button button || button.Template.FindName("Hover", button) is not UIElement overlay) return;
+        var duration = (Duration)Current.Resources["TransitionDuration"];
+        if (duration.TimeSpan == TimeSpan.Zero) { overlay.BeginAnimation(UIElement.OpacityProperty, null); overlay.Opacity = opacity; }
+        else overlay.BeginAnimation(UIElement.OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(opacity, duration));
+    }
     private Mutex? instance;
     private FileStream? stateLock;
     private string? smokeDirectory;
@@ -39,7 +48,20 @@ public partial class App : Application
             var window = new MainWindow(scheduler, client, autoDetect: !selfTest);
             MainWindow = window;
             if (selfTest)
-                window.Loaded += async (_, _) => await window.SmokeCloseAsync();
+                window.Loaded += async (_, _) =>
+                {
+                    try
+                    {
+                        string? Arg(string name) { var index = Array.IndexOf(e.Args, name); return index >= 0 ? e.Args.ElementAtOrDefault(index + 1) : null; }
+                        await window.ValidateUiAsync(Arg("--fixture-directory"), Arg("--screenshots") ?? Path.Combine(directory, "screenshots"));
+                        await window.SmokeCloseAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "ui-smoke-error.txt"), ex.ToString());
+                        Trace.WriteLine(ex); Shutdown(1);
+                    }
+                };
             window.Show();
             if (e.Args.Contains("--tray")) window.Hide();
         }

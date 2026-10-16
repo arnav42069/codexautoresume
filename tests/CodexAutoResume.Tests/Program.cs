@@ -2,13 +2,19 @@ using System.Text.Json;
 using CodexAutoResume.Core;
 using CodexAutoResume.Tests;
 
-if (args.FirstOrDefault() == "--version") { Console.WriteLine("codex-cli 0.159.2 fixture"); return 0; }
+if (args.FirstOrDefault() == "--version")
+{
+    var fixture = Environment.GetEnvironmentVariable("AUTORESUME_DISCOVERY_FIXTURE");
+    Console.WriteLine(fixture == "invalid" ? "unrelated-program 1.0.0" : "codex-cli 0.159.2 fixture");
+    return fixture == "fail" ? 17 : 0;
+}
 if (args.FirstOrDefault() == "app-server") { await ProtocolFixture.Run(); return 0; }
 
 if (args.FirstOrDefault() == "--live-smoke")
 {
     await using var live = new AppServerClient();
-    await live.ConnectAsync(args.ElementAtOrDefault(1) ?? "codex", CancellationToken.None);
+    var found = await CodexDiscovery.DiscoverAsync(args.ElementAtOrDefault(1));
+    await live.ConnectAsync(found.Path, CancellationToken.None);
     var threads = await live.ListAsync(CancellationToken.None);
     Console.WriteLine($"PASS real app-server initialization and paginated discovery ({live.Version}; {threads.Count} sessions). No turns submitted.");
     return 0;
@@ -29,12 +35,138 @@ void WithCodexInstallation(Action<string, Func<string[], string>> check)
     {
         var path = Path.Combine(new[] { directory }.Concat(parts).ToArray());
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, "fixture only; not an executable");
+        if (Path.GetExtension(path) == ".exe")
+        {
+            var pe = new System.Reflection.PortableExecutable.PEHeaderBuilder(imageCharacteristics: System.Reflection.PortableExecutable.Characteristics.ExecutableImage);
+            var builder = new System.Reflection.PortableExecutable.ManagedPEBuilder(pe,
+                new System.Reflection.Metadata.Ecma335.MetadataRootBuilder(new System.Reflection.Metadata.Ecma335.MetadataBuilder()),
+                new System.Reflection.Metadata.BlobBuilder());
+            var bytes = new System.Reflection.Metadata.BlobBuilder(); builder.Serialize(bytes); File.WriteAllBytes(path, bytes.ToArray());
+        }
+        else File.WriteAllText(path, "fixture only; not an executable");
         return path;
     }
     try { check(directory, Add); }
     finally { Directory.Delete(directory, recursive: true); }
 }
+
+async Task WithNativeFixture(Func<string, string, Task> check)
+{
+    var root = Path.Combine(Path.GetTempPath(), "native codex discovery & test-" + Guid.NewGuid());
+    Directory.CreateDirectory(root);
+    try
+    {
+        foreach (var file in Directory.GetFiles(AppContext.BaseDirectory)) File.Copy(file, Path.Combine(root, Path.GetFileName(file)));
+        var path = Path.Combine(root, OperatingSystem.IsWindows() ? "codex.exe" : "codex");
+        File.Copy(Environment.ProcessPath!, path);
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        await check(root, path);
+    }
+    finally { Directory.Delete(root, true); }
+}
+
+Test("discovery validates saved native executable with spaces before searching", async () =>
+{
+    await WithNativeFixture(async (_, path) =>
+    {
+        var found = await CodexDiscovery.DiscoverAsync(path, searchDirectories: [], npmRoot: _ => throw new Exception("Saved path should win"));
+        Equal(path, found.Path); True(found.Version.StartsWith("codex-cli "));
+    });
+});
+Test("missing saved executable is rediscovered and a manual override never silently switches", async () =>
+{
+    await WithNativeFixture(async (root, path) =>
+    {
+        var missing = Path.Combine(root, "old-version", "codex.exe");
+        Equal(path, (await CodexDiscovery.DiscoverAsync(missing, searchDirectories: [root], npmRoot: _ => Task.FromResult<string?>(null))).Path);
+        await Throws(() => CodexDiscovery.DiscoverAsync(missing, manualOverride: true, searchDirectories: [root]));
+    });
+});
+Test("filename alone and a native executable with unrelated version output are rejected", async () =>
+{
+    await WithNativeFixture(async (root, path) =>
+    {
+        var fake = Path.Combine(root, "fake.exe"); File.WriteAllText(fake, "not native");
+        await Throws(() => CodexDiscovery.ValidateAsync(fake));
+        var previous = Environment.GetEnvironmentVariable("AUTORESUME_DISCOVERY_FIXTURE");
+        try
+        {
+            Environment.SetEnvironmentVariable("AUTORESUME_DISCOVERY_FIXTURE", "invalid");
+            await Throws(() => CodexDiscovery.ValidateAsync(path));
+            Environment.SetEnvironmentVariable("AUTORESUME_DISCOVERY_FIXTURE", "fail");
+            await Throws(() => CodexDiscovery.ValidateAsync(path));
+        }
+        finally { Environment.SetEnvironmentVariable("AUTORESUME_DISCOVERY_FIXTURE", previous); }
+    });
+});
+Test("npm root discovery supports a custom global tree and bounded vendor fallback", async () =>
+{
+    await WithNativeFixture(async (root, path) =>
+    {
+        var npm = Path.Combine(root, "custom global", "node_modules");
+        var package = Path.Combine(npm, "@openai", "codex", "nonstandard-version", "native");
+        Directory.CreateDirectory(package);
+        foreach (var file in Directory.GetFiles(root)) File.Copy(file, Path.Combine(package, Path.GetFileName(file)));
+        var candidate = Path.Combine(package, Path.GetFileName(path));
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(candidate, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var found = await CodexDiscovery.DiscoverAsync(null, searchDirectories: [], npmRoot: _ => Task.FromResult<string?>(npm));
+        Equal(candidate, found.Path);
+    });
+});
+Test("missing npm and missing candidates report failure without creating a process server", async () =>
+{
+    await Throws(() => CodexDiscovery.DiscoverAsync(null, searchDirectories: [], npmRoot: _ => Task.FromResult<string?>(null)));
+});
+Test("automatic discovery connects the resolved native child to one owned server", async () =>
+{
+    await WithNativeFixture(async (root, path) =>
+    {
+        var found = await CodexDiscovery.DiscoverAsync(null, searchDirectories: [root], npmRoot: _ => Task.FromResult<string?>(null));
+        await using var client = new AppServerClient();
+        await client.ConnectAsync(found.Path, CancellationToken.None);
+        Equal(1, (await client.ListAsync(CancellationToken.None)).Count);
+        var pid = client.ProcessId; True(pid.HasValue);
+        await Throws(() => client.ConnectAsync(path, CancellationToken.None)); Equal(pid, client.ProcessId);
+    });
+});
+Test("HEX validation and low contrast accents keep readable text", () =>
+{
+    True(ThemePalette.TryNormalize(" #ff4fa3 ", out var normalized)); Equal("#FF4FA3", normalized);
+    foreach (var bad in new[] { "red", "#FFF", "#GGGGGG", "#FFFFFFFF", "" }) True(!ThemePalette.TryNormalize(bad, out _));
+    foreach (var accent in ThemePalette.Presets.Values.Concat(["#000000", "#121E1A", "#FFFFFF", "#29413A"]))
+        True(ThemePalette.Contrast(ThemePalette.AccentText(accent), ThemePalette.Surface) >= 4.5);
+    return Task.CompletedTask;
+});
+Test("appearance and validated executable cache survive a scheduler restart without enabling work", async () =>
+{
+    var root = Path.Combine(Path.GetTempPath(), "appearance restart-" + Guid.NewGuid()); Directory.CreateDirectory(root);
+    var path = Path.Combine(root, "state.json");
+    try
+    {
+        var settings = new AppearanceSettings { Accent = "#55DDFF", ReduceMotion = true, ReduceGlow = true, CloseToTray = false };
+        await using (var first = new Scheduler(new FakeCodex(), new JsonStateStore(path), backgroundPolling: false))
+        { await first.SaveAppearanceAsync(settings); await first.SaveExecutableAsync("/validated/codex"); }
+        await using var restarted = new Scheduler(new FakeCodex(), new JsonStateStore(path), backgroundPolling: false);
+        Equal(settings, restarted.Snapshot.Appearance); Equal("/validated/codex", restarted.Snapshot.CodexPath);
+        True(!restarted.IsConnected && !restarted.Snapshot.Enabled);
+        await Throws(() => restarted.SaveAppearanceAsync(settings with { Accent = "invalid" }));
+        Equal(settings, new JsonStateStore(path).Load().Appearance);
+    }
+    finally { Directory.Delete(root, true); }
+});
+Test("dashboard never confuses master ON with a verified connection", () =>
+{
+    var state = new AppState { Enabled = true };
+    Equal("Watcher disconnected", DashboardStatus.From(state, false).Heading);
+    Equal(ThemePalette.Failure, DashboardStatus.From(state, false, "Failure: retry").Health);
+    Equal("Watcher verified · scheduling ON", DashboardStatus.From(state, true).Heading);
+    state.Conversations.Add(new Conversation { Revalidated = false });
+    Equal("Waiting for revalidation", DashboardStatus.From(state, true).Heading);
+    state.Conversations[0].Revalidated = true; state.Conversations[0].WaitingForUsage = true;
+    Equal("Waiting for Codex usage", DashboardStatus.From(state, true).Heading);
+    True(!DashboardStatus.From(state, true).NextAction.Contains("reset at"));
+    return Task.CompletedTask;
+});
 
 Test("find native Codex in the current nested npm Windows layout", () =>
 {
@@ -507,6 +639,15 @@ Test("Git common directory identifies shared worktrees", async () =>
         Equal(original, await WorkspaceIdentity.GetAsync(worktree, CancellationToken.None));
         Directory.CreateDirectory(Path.Combine(dir, "nested"));
         Equal(original, await WorkspaceIdentity.GetAsync(Path.Combine(dir, "nested"), CancellationToken.None));
+        if (OperatingSystem.IsMacOS() && dir.StartsWith("/var/", StringComparison.Ordinal))
+            Equal(original, await WorkspaceIdentity.GetAsync("/private" + dir, CancellationToken.None));
+        if (!OperatingSystem.IsWindows())
+        {
+            var alias = Path.Combine(dir, "project-alias");
+            Directory.CreateSymbolicLink(alias, dir);
+            try { await Throws(() => WorkspaceIdentity.GetAsync(alias, CancellationToken.None)); }
+            finally { Directory.Delete(alias); }
+        }
     }
     finally
     {

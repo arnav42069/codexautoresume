@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using CodexAutoResume.Core;
 using Forms = System.Windows.Forms;
@@ -18,13 +20,30 @@ public partial class MainWindow : Window
     private readonly Forms.NotifyIcon tray;
     private readonly DispatcherTimer clock;
     private AppState state;
-    private bool exiting, busy;
+    private bool exiting, busy, appearanceReady, settingPath, manualPath;
+    private string? connectionFailure;
+    private readonly List<string> localEvents = [];
+    private readonly DispatcherTimer appearanceSave = new() { Interval = TimeSpan.FromMilliseconds(350) };
+    private AppearanceSettings appearance = new();
+    public static readonly DependencyProperty MotionEnabledProperty = DependencyProperty.Register(nameof(MotionEnabled), typeof(bool), typeof(MainWindow), new PropertyMetadata(false));
+    public bool MotionEnabled { get => (bool)GetValue(MotionEnabledProperty); private set => SetValue(MotionEnabledProperty, value); }
 
     public MainWindow(Scheduler scheduler, AppServerClient client, bool autoDetect = true)
     {
         this.scheduler = scheduler; this.client = client; state = scheduler.Snapshot;
+        appearance = state.Appearance;
+        PhosphorTheme.Apply(appearance);
         InitializeComponent();
-        Cards.ItemsSource = rows; CodexPath.Text = state.CodexPath;
+        SourceInitialized += (_, _) => PhosphorTheme.DarkTitleBar(this);
+        SystemParameters.StaticPropertyChanged += AccessibilityChanged;
+        LoadAppearance();
+        appearanceSave.Tick += async (_, _) =>
+        {
+            appearanceSave.Stop();
+            try { await scheduler.SaveAppearanceAsync(appearance); }
+            catch (Exception ex) { AccentValidation.Text = "Could not save appearance: " + ex.Message; }
+        };
+        Cards.ItemsSource = rows; SetExecutable(state.CodexPath);
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Open", null, (_, _) => Dispatcher.Invoke(Restore));
         menu.Items.Add("Pause / resume scheduling", null, (_, _) => Dispatcher.Invoke(async () => await Run(async () => { await scheduler.SetEnabledAsync(!state.Enabled); await scheduler.TickAsync(); })));
@@ -41,7 +60,7 @@ public partial class MainWindow : Window
         clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         clock.Tick += (_, _) => { foreach (var row in rows) row.RefreshClock(); };
         clock.Start(); Render(state);
-        if (autoDetect && CodexExecutableResolver.IsAutomatic(CodexPath.Text))
+        if (autoDetect)
             Loaded += async (_, _) => await FindCodexAsync(showMissing: false);
     }
 
@@ -49,11 +68,19 @@ public partial class MainWindow : Window
     {
         if (exiting) return;
         state = next;
-        if (!scheduler.IsConnected) Connection.Text = "Disconnected · connect and revalidate before scheduling";
+        if (!scheduler.IsConnected && connectionFailure == null) Connection.Text = "Disconnected · connect and revalidate before scheduling";
+        var status = DashboardStatus.From(state, scheduler.IsConnected, connectionFailure);
+        WatcherHeading.Text = status.Heading;
+        WatcherHeading.Foreground = SystemParameters.HighContrast ? SystemColors.WindowTextBrush : new SolidColorBrush((Color)ColorConverter.ConvertFromString(status.Health));
+        NextAction.Text = status.NextAction;
+        ConnectionBadge.Text = scheduler.IsConnected ? "OWNED APP-SERVER · CONNECTED" : "DISCONNECTED";
+        ConnectionErrorPanel.Visibility = connectionFailure == null ? Visibility.Collapsed : Visibility.Visible;
+        ConnectionError.Text = connectionFailure ?? "";
+        AddButton.IsEnabled = scheduler.IsConnected && state.Conversations.Count < 5;
         Toggle.Content = state.Enabled ? "● ON" : "○ OFF";
         tray.Text = state.Enabled ? "Codex AutoResume · ON" : "Codex AutoResume · OFF";
         Startup.IsChecked = state.StartWithWindows;
-        Empty.Visibility = state.Conversations.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        EmptyPanel.Visibility = state.Conversations.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         var queued = state.Conversations.Where(c => c.Status == ConversationStatus.Queued).Select(c => c.Id).ToList();
         foreach (var old in rows.Where(r => state.Conversations.All(c => c.Id != r.Id)).ToList()) rows.Remove(old);
         for (var i = 0; i < state.Conversations.Count; i++)
@@ -65,12 +92,19 @@ public partial class MainWindow : Window
         }
         int Count(ConversationStatus status) => state.Conversations.Count(c => c.Status == status);
         Summary.Text = $"{Count(ConversationStatus.Running)} running · {Count(ConversationStatus.Queued)} queued · {Count(ConversationStatus.RateLimited)} rate limited · {Count(ConversationStatus.Completed)} completed";
-        if (state.Conversations.Any(c => !c.Revalidated)) Summary.Text = "Last known: " + Summary.Text;
+        var saved = state.Conversations.Any(c => !c.Revalidated);
+        if (saved) Summary.Text = "Last known: " + Summary.Text;
+        string Total(ConversationStatus status) => Count(status) + (saved ? " *" : "");
+        RunningCount.Text = Total(ConversationStatus.Running); QueuedCount.Text = Total(ConversationStatus.Queued);
+        LimitedCount.Text = Total(ConversationStatus.RateLimited); CompletedCount.Text = Total(ConversationStatus.Completed);
+        CompletedCount.SetResourceReference(TextBlock.ForegroundProperty, saved ? "Secondary" : "Success");
         var limited = state.Conversations.Where(c => c.WaitingForUsage).ToList();
         Usage.Text = limited.Count == 0 ? "Usage is checked before scheduling; reset permission is verified with Codex." :
             limited.Any(c => c.ResetAt == null) ? "Usage limited · some reset estimates unavailable · backoff enabled" :
             $"Usage limited · estimated reset {limited.Max(c => c.ResetAt)!.Value.ToLocalTime():g}";
-        Activity.Text = string.Join(Environment.NewLine, state.Log);
+        var selected = (Activity.SelectedItem as EventRow)?.Message;
+        Activity.ItemsSource = localEvents.Concat(state.Log).Select(EventRow.From).ToArray();
+        if (selected != null) Activity.SelectedItem = Activity.Items.Cast<EventRow>().FirstOrDefault(row => row.Message == selected);
     }
 
     private async Task Run(Func<Task> action)
@@ -78,13 +112,14 @@ public partial class MainWindow : Window
         if (busy) return;
         busy = true;
         try { await action(); }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Codex AutoResume", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        catch (Exception ex) { RecordError(ex.Message); }
         finally { busy = false; }
     }
-    private async void ConnectClick(object sender, RoutedEventArgs e) => await Run(async () =>
+    private async void ConnectClick(object sender, RoutedEventArgs e) => await Run(ConnectAsync);
+    private async Task ConnectAsync()
     {
-        ConnectButton.IsEnabled = FindButton.IsEnabled = BrowseButton.IsEnabled = CodexPath.IsEnabled = Exclusive.IsEnabled = false;
-        Connection.Text = "Connecting and revalidating…";
+        if (client.ProcessId != null) { RecordError("An owned app-server already exists. Restart AutoResume before reconnecting."); return; }
+        SetConnectionControls(false);
         try
         {
             if (Exclusive.IsChecked != true)
@@ -92,54 +127,77 @@ public partial class MainWindow : Window
                 Connection.Text = "Finish active Codex work, close Desktop and other clients, then tick the exclusive ownership checkbox.";
                 return;
             }
-            var selected = CodexPath.Text;
-            var executable = await Task.Run(() => CodexExecutableResolver.Resolve(selected));
-            CodexPath.Text = executable;
-            await scheduler.ConnectAsync(executable, exclusiveOwnership: true);
+            connectionFailure = null;
+            Connection.Text = "Validating Codex, connecting and revalidating…";
+            var found = await CodexDiscovery.DiscoverAsync(CodexPath.Text, manualPath);
+            SetExecutable(found.Path); DetectedVersion.Text = found.Version;
+            Detection.Text = "Native executable validated. App-server execution requires exclusive ownership.";
+            await scheduler.SaveExecutableAsync(found.Path);
+            await scheduler.ConnectAsync(found.Path, exclusiveOwnership: true);
             Connection.Text = $"Connected · {client.Version} · owned app-server";
-            CodexPath.IsEnabled = Exclusive.IsEnabled = false;
+            connectionFailure = null;
         }
         catch (Exception ex)
         {
-            Connection.Text = ex.Message + (client.ProcessId != null ? " Restart AutoResume before reconnecting." : "");
+            RecordError(ex.Message + (client.ProcessId != null ? " Restart AutoResume before reconnecting." : " Re-detect or Browse, then Connect to retry."));
         }
-        finally
-        {
-            ConnectButton.IsEnabled = FindButton.IsEnabled = BrowseButton.IsEnabled = CodexPath.IsEnabled = Exclusive.IsEnabled = client.ProcessId == null;
-        }
-    });
+        finally { SetConnectionControls(client.ProcessId == null); Render(scheduler.Snapshot); }
+    }
 
     private async Task FindCodexAsync(bool showMissing) => await Run(async () =>
     {
-        FindButton.IsEnabled = BrowseButton.IsEnabled = ConnectButton.IsEnabled = false;
+        if (client.ProcessId != null) return;
+        SetConnectionControls(false);
         var previous = CodexPath.Text;
-        Connection.Text = "Looking for the native Codex CLI…";
+        Detection.Text = "Checking saved path, PATH and npm installations…";
         try
         {
-            var found = await Task.Run(() => CodexExecutableResolver.Find());
-            if (CodexPath.Text != previous) { Connection.Text = "Using the path you entered. Confirm exclusive ownership, then connect."; return; }
-            if (found != null)
-            {
-                CodexPath.Text = found;
-                Connection.Text = "Codex found. Finish active work, close Desktop and other clients, then confirm exclusive ownership and connect.";
-            }
-            else Connection.Text = showMissing
-                ? "Codex CLI was not found. Install it and sign in, then use Find Codex or Browse to select codex.exe."
-                : "Select Find Codex or Browse. Close Desktop and confirm exclusive ownership before connecting.";
+            var found = await CodexDiscovery.DiscoverAsync(showMissing ? null : previous);
+            if (CodexPath.Text != previous) return;
+            SetExecutable(found.Path); DetectedVersion.Text = found.Version;
+            await scheduler.SaveExecutableAsync(found.Path);
+            Detection.Text = "Detected and version-validated. Close other clients and confirm ownership before connecting.";
         }
-        finally { FindButton.IsEnabled = BrowseButton.IsEnabled = ConnectButton.IsEnabled = client.ProcessId == null; }
+        catch (Exception ex) { DetectedVersion.Text = ""; Detection.Text = ex.Message; }
+        finally { SetConnectionControls(client.ProcessId == null); }
     });
 
-    private async void FindCodexClick(object sender, RoutedEventArgs e) => await FindCodexAsync(showMissing: true);
-    private void BrowseCodexClick(object sender, RoutedEventArgs e)
+    private void SetConnectionControls(bool enabled)
     {
-        if (busy || client.ProcessId != null) return;
+        ConnectButton.IsEnabled = FindButton.IsEnabled = BrowseButton.IsEnabled = CodexPath.IsEnabled = Exclusive.IsEnabled = enabled;
+    }
+    private void SetExecutable(string path)
+    {
+        settingPath = true; CodexPath.Text = path; settingPath = false; manualPath = false;
+    }
+    private void CodexPathChanged(object sender, TextChangedEventArgs e)
+    {
+        if (settingPath || Detection == null) return;
+        manualPath = true; DetectedVersion.Text = ""; Detection.Text = "Manual override · validation required before connecting.";
+    }
+    private async void FindCodexClick(object sender, RoutedEventArgs e) => await FindCodexAsync(showMissing: true);
+    private async void BrowseCodexClick(object sender, RoutedEventArgs e) => await Run(async () =>
+    {
+        if (client.ProcessId != null) return;
         var picker = new OpenFileDialog { Title = "Choose the native Codex CLI", Filter = "Codex executable (codex.exe)|codex.exe|Windows executables (*.exe)|*.exe", CheckFileExists = true };
-        if (picker.ShowDialog(this) == true)
+        if (picker.ShowDialog(this) != true) return;
+        CodexPath.Text = picker.FileName; manualPath = true;
+        try
         {
-            CodexPath.Text = picker.FileName;
-            Connection.Text = "Executable selected. Close Desktop and other clients, confirm exclusive ownership, then connect.";
+            var found = await CodexDiscovery.DiscoverAsync(picker.FileName, manualOverride: true);
+            SetExecutable(found.Path); manualPath = true; DetectedVersion.Text = found.Version;
+            await scheduler.SaveExecutableAsync(found.Path);
+            Detection.Text = "Manual override validated and saved. Confirm exclusive ownership, then Connect.";
         }
+        catch (Exception ex) { Detection.Text = ex.Message; }
+    });
+    private void RecordError(string message)
+    {
+        connectionFailure = message;
+        localEvents.Insert(0, $"{DateTimeOffset.UtcNow:u}  Error: {message}");
+        if (localEvents.Count > 50) localEvents.RemoveAt(50);
+        ConnectionSettings.IsExpanded = true;
+        Render(scheduler.Snapshot);
     }
     private async void ToggleClick(object sender, RoutedEventArgs e) => await Run(async () => { await scheduler.SetEnabledAsync(!state.Enabled); await scheduler.TickAsync(); });
     private async void AddClick(object sender, RoutedEventArgs e) => await Run(async () =>
@@ -190,8 +248,13 @@ public partial class MainWindow : Window
         Connection.Text = DesktopIntegration.CreateShortcut(Environment.ProcessPath!, force: true);
         return Task.CompletedTask;
     });
-    private void OnClosing(object? sender, CancelEventArgs e) { if (!exiting) { e.Cancel = true; Hide(); } }
-    private void OnWindowStateChanged(object? sender, EventArgs e) { if (WindowState == WindowState.Minimized) Hide(); }
+    private async void OnClosing(object? sender, CancelEventArgs e)
+    {
+        if (exiting) return; e.Cancel = true;
+        if (appearance.CloseToTray) Hide(); else await ExitAsync();
+    }
+    private void OnWindowStateChanged(object? sender, EventArgs e) { if (WindowState == WindowState.Minimized && appearance.MinimizeToTray) Hide(); }
+    private async void ExitClick(object sender, RoutedEventArgs e) => await ExitAsync();
     private void Restore() { Show(); WindowState = WindowState.Normal; Activate(); }
     private async Task ExitAsync()
     {
@@ -204,13 +267,73 @@ public partial class MainWindow : Window
             var current = await scheduler.GetSnapshotAsync();
             if (current.Conversations.Any(c => c.ExecutionActive) || current.Attempts.Any(a => a.Phase is AttemptPhase.Prepared or AttemptPhase.Accepted))
             { MessageBox.Show(this, "Active or uncertain attempts remain. Scheduling is OFF; leave the utility in the tray until they finish or are reconciled."); return; }
-            exiting = true; clock.Stop(); await scheduler.DisposeAsync(); tray.Visible = false; tray.Dispose(); Application.Current.Shutdown();
+            await FlushAppearanceAsync(); exiting = true; clock.Stop(); SystemParameters.StaticPropertyChanged -= AccessibilityChanged; await scheduler.DisposeAsync(); tray.Visible = false; tray.Dispose(); Application.Current.Shutdown();
         });
     }
 
+    private void LoadAppearance()
+    {
+        appearanceReady = false;
+        AccentPreset.ItemsSource = ThemePalette.Presets.Keys;
+        AccentPreset.SelectedItem = ThemePalette.Presets.FirstOrDefault(p => p.Value == appearance.Accent).Key;
+        AccentHex.Text = appearance.Accent;
+        ReduceMotion.IsChecked = appearance.ReduceMotion; ReduceGlow.IsChecked = appearance.ReduceGlow;
+        MinimizeTray.IsChecked = appearance.MinimizeToTray; CloseTray.IsChecked = appearance.CloseToTray;
+        appearanceReady = true; ApplyAppearance();
+    }
+    private void ApplyAppearance()
+    {
+        PhosphorTheme.Apply(appearance); MotionEnabled = PhosphorTheme.MotionEnabled(appearance);
+        TerminalMark.Effect = PhosphorTheme.MarkGlow(appearance);
+    }
+    private void AccessibilityChanged(object? sender, PropertyChangedEventArgs e) => Dispatcher.BeginInvoke(new Action(() =>
+    {
+        if (!exiting) { ApplyAppearance(); Render(state); }
+    }));
+    private void AppearanceChanged(object sender, RoutedEventArgs e)
+    {
+        if (!appearanceReady) return;
+        appearance = appearance with { ReduceMotion = ReduceMotion.IsChecked == true, ReduceGlow = ReduceGlow.IsChecked == true,
+            MinimizeToTray = MinimizeTray.IsChecked == true, CloseToTray = CloseTray.IsChecked == true };
+        PreviewAndSave();
+    }
+    private void PreviewAndSave()
+    {
+        ApplyAppearance(); appearanceSave.Stop(); appearanceSave.Start();
+    }
+    private void AccentChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!appearanceReady) return;
+        if (!ThemePalette.TryNormalize(AccentHex.Text, out var accent))
+        { AccentValidation.Text = "Use six HEX digits, for example #FF4FA3. The last valid color remains active."; return; }
+        AccentValidation.Text = ""; appearance = appearance with { Accent = accent }; PreviewAndSave();
+    }
+    private void PresetChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (appearanceReady && AccentPreset.SelectedItem is string name) AccentHex.Text = ThemePalette.Presets[name];
+    }
+    private void PickAccentClick(object sender, RoutedEventArgs e)
+    {
+        using var picker = new Forms.ColorDialog { FullOpen = true, Color = System.Drawing.ColorTranslator.FromHtml(appearance.Accent) };
+        if (picker.ShowDialog(new WindowHandle(this)) == Forms.DialogResult.OK)
+        { AccentPreset.SelectedIndex = -1; AccentHex.Text = $"#{picker.Color.R:X2}{picker.Color.G:X2}{picker.Color.B:X2}"; }
+    }
+    private sealed class WindowHandle(Window window) : Forms.IWin32Window
+    { public IntPtr Handle => new System.Windows.Interop.WindowInteropHelper(window).Handle; }
+    private void ResetAppearanceClick(object sender, RoutedEventArgs e)
+    {
+        appearance = new AppearanceSettings(); LoadAppearance(); PreviewAndSave();
+    }
+    private async Task FlushAppearanceAsync()
+    {
+        appearanceSave.Stop(); await scheduler.SaveAppearanceAsync(appearance);
+    }
+    private void EventSelected(object sender, SelectionChangedEventArgs e)
+    { EventDetails.Text = (Activity.SelectedItem as EventRow)?.Message ?? ""; }
+
     internal async Task SmokeCloseAsync()
     {
-        exiting = true; clock.Stop(); await scheduler.DisposeAsync(); tray.Visible = false; tray.Dispose();
+        await FlushAppearanceAsync(); exiting = true; clock.Stop(); SystemParameters.StaticPropertyChanged -= AccessibilityChanged; await scheduler.DisposeAsync(); tray.Visible = false; tray.Dispose();
         Application.Current.Shutdown(0);
     }
 }

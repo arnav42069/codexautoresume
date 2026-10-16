@@ -18,7 +18,7 @@ public sealed class ConversationView : INotifyPropertyChanged
         ConversationStatus.NeedsAttention => "Needs Attention",
         _ => conversation.Status.ToString()
     }) + (conversation.Revalidated ? "" : " · unverified");
-    public string BadgeBrush => conversation.Status switch
+    public string BadgeBrush => !conversation.Revalidated ? "#4C5C59" : conversation.Status switch
     {
         ConversationStatus.Running => "#216CBA",
         ConversationStatus.Queued => "#6954A6",

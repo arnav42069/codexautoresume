@@ -2,7 +2,7 @@
 
 These checks require Windows and a disposable local Git workspace with the user's authenticated native Codex CLI. They were not run on this Linux host. Use harmless tasks and review the existing Codex configuration before permitting real execution.
 
-1. Run `scripts/build.ps1`. Confirm automated tests and native WPF/tray startup (`--self-test`) succeed. The startup check does not connect to Codex.
+1. Run `scripts/build.ps1`. Confirm automated tests and native WPF/tray startup (`--self-test`) succeed. The startup check connects only to a local protocol fixture, renders the main states and saves screenshots; no model turns are submitted. CI separately discovers and initializes the official CLI in an isolated Codex home.
 2. Launch the published executable. Check keyboard navigation, six badge colors, running pulse, summary and log at 100% and 150% scaling. Minimize/close to tray and restore. Notification policy may suppress balloons.
 3. Close other clients, connect to native Codex and add a known disposable session through discovery and UUID entry. Confirm title/path. Random/duplicate UUIDs, a missing workspace and a sixth entry must fail without sending prompts.
 4. Enable an interrupted harmless task. Verify one configured continuation reaches its exact thread, elapsed time advances, completion records a timestamp and disarms further messages. Explicit rearm permits one new turn. Keep Desktop closed.

@@ -50,6 +50,7 @@ public sealed class AppState
     public bool Enabled { get; set; }
     public string CodexPath { get; set; } = "codex.exe";
     public bool StartWithWindows { get; set; }
+    public AppearanceSettings Appearance { get; set; } = new();
     public List<Conversation> Conversations { get; set; } = [];
     public List<ResumeAttempt> Attempts { get; set; } = [];
     public List<string> Log { get; set; } = [];

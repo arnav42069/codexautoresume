@@ -10,7 +10,8 @@ A desktop app that resumes interrupted Codex work when usage is available again.
 
 - Queue up to five existing conversations.
 - Set priorities or run independent repositories in parallel.
-- See live status, elapsed time and reset countdowns.
+- See live status, elapsed time and verified reset estimates.
+- Windows: a compact Phosphor dashboard with saved accent colors.
 - Keep your queue across restarts. Review uncertain attempts before retrying.
 
 Completed work stays completed. Switching **OFF** stops future continuations while active work finishes.
@@ -36,7 +37,7 @@ Windows x64 · Linux x64/ARM64 with X11 or XWayland · macOS 12+ on Intel or App
 
 Codex is detected automatically. Close other Codex clients, confirm ownership, connect and add your verified sessions.
 
-On Windows, closing the window keeps it in the tray. On Linux, minimize to keep it running; closing exits once work is settled. macOS also has a menu-bar icon.
+On Windows, closing the window keeps it in the tray by default; change this in settings. On Linux, minimize to keep it running; closing exits once work is settled. macOS also has a menu-bar icon.
 
 ## Build
 
@@ -49,3 +50,5 @@ With the .NET 8.0.426 SDK:
 On Linux or macOS, use `bash scripts/build-desktop.sh linux-x64` or your matching `linux-arm64`, `osx-x64`, or `osx-arm64` runtime.
 
 [npm commands](docs/NPM-INSTALL.md) · [Usage](docs/USAGE.md) · [Integration](docs/INTEGRATION.md) · [Validation](docs/VALIDATION.md)
+
+[Appearance and automatic Codex detection](docs/PHOSPHOR.md)
