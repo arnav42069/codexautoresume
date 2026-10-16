@@ -1,15 +1,15 @@
 {
-  "version": "0.1.0",
-  "baseUrl": "https://github.com/arnav42069/codexautoresume/releases/download/v0.1.0/",
+  "version": "0.1.1",
+  "baseUrl": "https://github.com/arnav42069/codexautoresume/releases/download/v0.1.1/",
   "app": {
     "asset": "CodexAutoResume-win-x64.zip",
-    "sha256": "72ee360afebebe3f787f60c7588dad4b63d4c74d9c3f56afc79744ba25ae4017",
+    "sha256": "3dac8decfff68a73d8ff0cabd9a437ceec003017de611da9955d8384088589d0",
     "executable": "CodexAutoResume.exe",
     "subsystem": 2
   },
   "probe": {
     "asset": "CodexAutoResume-DesktopProbe-win-x64.zip",
-    "sha256": "9fb2b1d8f734ce2d39ce8580819d3749bd6a436d77fca26099ab7b3489e41ff0",
+    "sha256": "fd49ae6785403fb5218100c2fb24812f22aa4dab6051e737a80be29209b29454",
     "executable": "CodexAutoResume.Probe.exe",
     "subsystem": 3
   }
