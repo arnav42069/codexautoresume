@@ -21,6 +21,7 @@ jobs:
           ./scripts/build.ps1
           Copy-Item artifacts/ui-screenshots/05-queue-statuses.png artifacts/CodexAutoResume-Phosphor.png
           Copy-Item artifacts/ui-screenshots/01-empty.png artifacts/CodexAutoResume-Phosphor-empty.png
+          Copy-Item artifacts/ui-screenshots/04-connected-off.png artifacts/CodexAutoResume-Phosphor-readonly.png
           dotnet publish tools/CodexAutoResume.Probe -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o artifacts/desktop-probe-win-x64

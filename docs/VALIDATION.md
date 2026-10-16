@@ -36,3 +36,9 @@ Linux local checks passed 75 core tests, 38 npm tests (two Windows-specific test
 
 
 The v0.2.1 native render review corrected the WPF main-window style lookup and added assertions for the actual background and foreground. v0.2.2 also routes UI error refreshes through existing safe presentation snapshots, without changing scheduling. Final release validation: [Windows, Linux and macOS](https://github.com/arnav42069/codexautoresume/actions/runs/38887852219).
+
+## Desktop-open discovery (v0.3.0)
+
+Local verification passed 89 core tests and the packaged Linux window/shortcut check, including native fixture discovery, automatic unarmed queue import, recency sorting/fallback, pagination, stale activity clearing, workspace drift and queue/journal preservation. Real Codex CLI 0.159.2 recent-chat queries completed read-only with zero sessions visible on this host; this does not establish access to the user's Desktop history.
+
+[Windows run 38957292850](https://github.com/arnav42069/codexautoresume/actions/runs/38957292850) passed native WPF checks with the ownership checkbox unticked during connection, plus official CLI discovery and read-only protocol validation. [Linux/macOS checks](https://github.com/arnav42069/codexautoresume/actions/runs/38957292928) exercise the same native fixture connection through the packaged interfaces. No model turn is submitted by these checks.
