@@ -16,6 +16,7 @@ public partial class MainWindow : Window
 {
     private readonly Scheduler scheduler;
     private readonly AppServerClient client;
+    private readonly AutoConnection autoConnection;
     private readonly ObservableCollection<ConversationView> rows = [];
     private readonly Forms.NotifyIcon tray;
     private readonly DispatcherTimer clock;
@@ -30,7 +31,7 @@ public partial class MainWindow : Window
 
     public MainWindow(Scheduler scheduler, AppServerClient client, bool autoDetect = true)
     {
-        this.scheduler = scheduler; this.client = client; state = scheduler.Snapshot;
+        this.scheduler = scheduler; this.client = client; autoConnection = new(scheduler); state = scheduler.Snapshot;
         appearance = state.Appearance;
         PhosphorTheme.Apply(appearance);
         InitializeComponent();
@@ -58,17 +59,21 @@ public partial class MainWindow : Window
             tray.ShowBalloonTip(4000);
         }));
         clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        clock.Tick += (_, _) => { foreach (var row in rows) row.RefreshClock(); };
+        clock.Tick += async (_, _) =>
+        {
+            foreach (var row in rows) row.RefreshClock();
+            if (!scheduler.IsConnected && !exiting) await Run(() => ConnectAsync(force: false));
+        };
         clock.Start(); Render(state);
         if (autoDetect)
-            Loaded += async (_, _) => await Run(ConnectAsync);
+            Loaded += async (_, _) => await Run(() => ConnectAsync(force: true));
     }
 
     private void Render(AppState next)
     {
         if (exiting) return;
         state = next;
-        if (!scheduler.IsConnected && connectionFailure == null) Connection.Text = "Disconnected · connect and revalidate before scheduling";
+        if (!scheduler.IsConnected && connectionFailure == null) Connection.Text = autoConnection.Status;
         var status = DashboardStatus.From(state, scheduler.IsConnected, connectionFailure, scheduler.HasExecutionOwnership);
         WatcherHeading.Text = status.Heading;
         WatcherHeading.Foreground = SystemParameters.HighContrast ? SystemColors.WindowTextBrush : new SolidColorBrush((Color)ColorConverter.ConvertFromString(status.Health));
@@ -119,28 +124,26 @@ public partial class MainWindow : Window
         catch (Exception ex) { RecordError(ex.Message); }
         finally { busy = false; }
     }
-    private async void ConnectClick(object sender, RoutedEventArgs e) => await Run(ConnectAsync);
-    private async Task ConnectAsync()
+    private async void ConnectClick(object sender, RoutedEventArgs e) => await Run(() => ConnectAsync(force: true));
+    private async Task ConnectAsync(bool force = true)
     {
-        if (client.ProcessId != null) { RecordError("An owned app-server already exists. Restart AutoResume before reconnecting."); return; }
+        if (scheduler.IsConnected || !force && autoConnection.NextRetryAt > DateTimeOffset.UtcNow) return;
         SetConnectionControls(false);
         try
         {
-            connectionFailure = null;
             Connection.Text = "Validating Codex and connecting read-only…";
-            var found = await CodexDiscovery.DiscoverAsync(CodexPath.Text, manualPath);
-            SetExecutable(found.Path); DetectedVersion.Text = found.Version;
-            Detection.Text = "Native executable validated. Browsing does not require closing Desktop.";
-            await scheduler.SaveExecutableAsync(found.Path);
-            await scheduler.ConnectForDiscoveryAsync(found.Path);
-            Connection.Text = $"Connected read-only · {client.Version} · Desktop may remain open";
-            connectionFailure = null;
+            if (!await autoConnection.TryConnectAsync(CodexPath.Text, manualPath, force)) return;
+            if (autoConnection.Error is { } error) RecordError(error);
+            else if (autoConnection.Detected is { } found)
+            {
+                SetExecutable(found.Path); DetectedVersion.Text = found.Version;
+                Detection.Text = "Native executable validated. Reconnects automatically; Desktop may remain open.";
+                await scheduler.SaveExecutableAsync(found.Path);
+                connectionFailure = null;
+            }
+            Connection.Text = autoConnection.Status;
         }
-        catch (Exception ex)
-        {
-            RecordError(ex.Message + (client.ProcessId != null ? " Restart AutoResume before reconnecting." : " Re-detect or Browse, then Connect to retry."));
-        }
-        finally { SetConnectionControls(client.ProcessId == null); Render(await scheduler.GetSnapshotAsync()); }
+        finally { SetConnectionControls(!scheduler.IsConnected); Render(await scheduler.GetSnapshotAsync()); }
     }
 
     private async Task FindCodexAsync(bool showMissing) => await Run(async () =>

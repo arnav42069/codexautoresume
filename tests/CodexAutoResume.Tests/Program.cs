@@ -126,7 +126,7 @@ Test("automatic discovery connects the resolved native child to one owned server
         await client.ConnectAsync(found.Path, CancellationToken.None);
         Equal(1, (await client.ListAsync(CancellationToken.None)).Count);
         var pid = client.ProcessId; True(pid.HasValue);
-        await Throws(() => client.ConnectAsync(path, CancellationToken.None)); Equal(pid, client.ProcessId);
+        await client.ConnectAsync(path, CancellationToken.None); Equal(pid, client.ProcessId);
     });
 });
 Test("HEX validation and low contrast accents keep readable text", () =>
@@ -885,6 +885,31 @@ Test("loss of exclusivity aborts before the next continuity operation", () => Pr
     await Throws(() => client.VerifyExistingThreadAsync(ProtocolFixture.Id, () => { if (++checks > 4) throw new InvalidOperationException("Exclusive access lost"); }));
     True(!methods.Contains("thread/resume"));
 }));
+
+Test("automatic connection retries later without taking ownership", async () =>
+{
+    await using var rig = new Rig();
+    var now = rig.Now; int attempts = 0;
+    var connection = new AutoConnection(rig.Scheduler, (_, _, _) =>
+    {
+        attempts++;
+        return attempts == 1 ? throw new IOException("Codex is not installed yet") : Task.FromResult(new DetectedCodex("codex", "codex-cli 1.0.0"));
+    }, () => now);
+    True(await connection.TryConnectAsync("codex", force: true));
+    True(!rig.Scheduler.IsConnected); Equal(now.AddSeconds(5), connection.NextRetryAt);
+    now = now.AddSeconds(5); True(await connection.TryConnectAsync("codex"));
+    True(rig.Scheduler.IsConnected); True(!rig.Scheduler.HasExecutionOwnership); Equal(1, rig.Client.Connections);
+});
+
+Test("disconnect keeps attempts and reconnect ignores stale connection events", async () =>
+{
+    await using var rig = new Rig(); await rig.Connect(); var id = await rig.Add();
+    var oldConnection = rig.Client.ConnectionId; rig.Client.Disconnect(); await rig.WaitFor(s => !s.Enabled);
+    await rig.Scheduler.ConnectForDiscoveryAsync("codex");
+    rig.Client.EmitFromConnection(oldConnection, "turn/completed", new { threadId = id });
+    await Task.Delay(20);
+    True(rig.Scheduler.IsConnected); True(!rig.Scheduler.HasExecutionOwnership); Equal(1, (await rig.State()).Conversations.Count);
+});
 
 int failed = 0;
 foreach (var (name, run) in tests)

@@ -14,6 +14,7 @@ public sealed class MainWindow : Window
 {
     private readonly Scheduler scheduler;
     private readonly AppServerClient client;
+    private readonly AutoConnection autoConnection;
     private readonly StackPanel cards = new() { Spacing = 10 };
     private readonly List<(ConversationView View, TextBlock Clock, Border Badge)> clocks = [];
     private readonly TextBox path = new() { MinWidth = 220, Watermark = "Codex CLI is detected automatically" };
@@ -27,11 +28,11 @@ public sealed class MainWindow : Window
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly TrayIcon? tray;
     private AppState state;
-    private bool busy, exiting, pulse;
+    private bool busy, exiting, pulse, manualPath, settingPath;
 
     public MainWindow(Scheduler scheduler, AppServerClient client)
     {
-        this.scheduler = scheduler; this.client = client; state = scheduler.Snapshot;
+        this.scheduler = scheduler; this.client = client; autoConnection = new(scheduler); state = scheduler.Snapshot;
         Title = "Codex AutoResume"; Width = 1000; Height = 850; MinWidth = 780; MinHeight = 620;
         Background = Brush.Parse("#101824");
         var iconPath = Path.Combine(AppContext.BaseDirectory, "icon.png");
@@ -42,7 +43,7 @@ public sealed class MainWindow : Window
             new TextBlock { Text = "Codex AutoResume", FontSize = 26, FontWeight = FontWeight.SemiBold },
             Text("Your existing sessions. A durable queue. No repeated prompts.", "#A6BDD9") } });
         var tools = new DockPanel { LastChildFill = true };
-        foreach (var button in new[] { Button("Connect read-only", Connect), Button("Browse…", Browse), Button("Find Codex", Find) })
+        foreach (var button in new[] { Button("Connect read-only", () => Connect()), Button("Browse…", Browse), Button("Find Codex", Find) })
         { DockPanel.SetDock(button, Dock.Right); tools.Children.Add(button); }
         tools.Children.Add(path);
         var connectPanel = new StackPanel { Spacing = 12, Children = {
@@ -65,6 +66,7 @@ public sealed class MainWindow : Window
         for (int i = 0; i < sections.Length; i++) { Grid.SetRow(sections[i], i); root.Children.Add(sections[i]); }
         Content = root;
         path.Text = CodexExecutableResolver.IsAutomatic(state.CodexPath) ? "codex" : state.CodexPath;
+        path.TextChanged += (_, _) => { if (!settingPath) manualPath = true; };
         toggle.Click += async (_, _) => await Run(async () => { await scheduler.SetEnabledAsync(!state.Enabled); await scheduler.TickAsync(); });
         startup.Click += async (_, _) => await Run(async () =>
         {
@@ -72,10 +74,11 @@ public sealed class MainWindow : Window
             await scheduler.SaveSettingsAsync(startup.IsChecked == true);
         });
         scheduler.Changed += next => Dispatcher.UIThread.Post(() => Render(next));
-        timer.Tick += (_, _) =>
+        timer.Tick += async (_, _) =>
         {
             pulse = !pulse;
             foreach (var row in clocks) { row.Clock.Text = row.View.Timing; row.Badge.Opacity = row.View.IsRunning && pulse ? 0.7 : 1; }
+            if (!scheduler.IsConnected && !Program.SelfTest) await Run(() => Connect(force: false));
         };
         timer.Start(); Render(state);
         if (OperatingSystem.IsMacOS() && Icon != null && !Program.SelfTest)
@@ -94,7 +97,7 @@ public sealed class MainWindow : Window
             {
                 try { DesktopIntegration.CreateShortcut(Environment.ProcessPath!); }
                 catch (Exception ex) { connection.Text = "Desktop shortcut: " + ex.Message; }
-                await Run(Connect);
+                await Run(() => Connect());
                 if (Program.StartInTray) { if (OperatingSystem.IsMacOS()) Hide(); else WindowState = WindowState.Minimized; }
             }
             if (Program.SelfTest && Program.FixtureDirectory != null)
@@ -150,35 +153,39 @@ public sealed class MainWindow : Window
     }
     private async Task Find()
     {
-        if (client.ProcessId != null) { connection.Text = "Restart AutoResume to choose another Codex installation."; return; }
-        var found = await CodexDiscovery.DiscoverAsync(); path.Text = found.Path;
+        if (scheduler.IsConnected) return;
+        var found = await CodexDiscovery.DiscoverAsync(); SetExecutable(found.Path);
         await scheduler.SaveExecutableAsync(found.Path);
         connection.Text = $"{found.Version} detected. Connect read-only; Desktop may stay open.";
     }
     private async Task Browse()
     {
-        if (client.ProcessId != null) return;
+        if (scheduler.IsConnected) return;
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions { Title = "Select the Codex CLI executable", AllowMultiple = false });
         if (files.FirstOrDefault()?.TryGetLocalPath() is { } selected)
         {
             var found = await CodexDiscovery.DiscoverAsync(selected, manualOverride: true);
-            path.Text = found.Path; await scheduler.SaveExecutableAsync(found.Path);
+            SetExecutable(found.Path); manualPath = true; await scheduler.SaveExecutableAsync(found.Path);
             connection.Text = $"{found.Version} selected. Connect read-only; Desktop may stay open.";
         }
     }
-    private async Task Connect()
+    private void SetExecutable(string value) { settingPath = true; path.Text = value; settingPath = false; manualPath = false; }
+    private async Task Connect(bool force = true)
     {
-        if (scheduler.IsConnected) { connection.Text = "Already connected. Use Refresh chats to update discovery."; return; }
-        if (client.ProcessId != null) { connection.Text = "Restart AutoResume to retry the existing server."; return; }
+        if (scheduler.IsConnected || !force && autoConnection.NextRetryAt > DateTimeOffset.UtcNow) return;
         path.IsEnabled = false;
         try
         {
-            var found = await CodexDiscovery.DiscoverAsync(path.Text);
-            path.Text = found.Path; connection.Text = "Connecting read-only and discovering recent chats…";
-            await scheduler.ConnectForDiscoveryAsync(found.Path);
-            connection.Text = $"Connected read-only · {found.Version} · Desktop may remain open";
+            connection.Text = "Detecting Codex and connecting read-only…";
+            if (!await autoConnection.TryConnectAsync(path.Text, manualPath, force)) return;
+            if (autoConnection.Error is { } error) connection.Text = error;
+            else if (autoConnection.Detected is { } found)
+            {
+                SetExecutable(found.Path); await scheduler.SaveExecutableAsync(found.Path);
+                connection.Text = $"Connected read-only · {found.Version} · Desktop may remain open";
+            }
         }
-        finally { path.IsEnabled = client.ProcessId == null; }
+        finally { path.IsEnabled = !scheduler.IsConnected; }
     }
     private async Task Acquire()
     {

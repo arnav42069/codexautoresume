@@ -22,12 +22,13 @@ public sealed partial class Scheduler : IAsyncDisposable
     private volatile bool ownershipConfirmed;
     private bool storageFault, autoFillAllowed;
     private DateTimeOffset nextPoll;
+    private long connectionId;
     private UsageSnapshot? usage;
     private DateTimeOffset usageCheckedAt;
     public event Action<AppState>? Changed;
     public event Action<string>? Notice;
-    public bool IsConnected => connected;
-    public bool HasExecutionOwnership => connected && ownershipConfirmed;
+    public bool IsConnected => connected && client.IsConnected;
+    public bool HasExecutionOwnership => IsConnected && ownershipConfirmed;
     public AppState Snapshot => StateJson.Clone(state); // Read on the gate or before starting.
 
     public Scheduler(ICodexClient client, IStateStore store, Func<DateTimeOffset>? clock = null,
@@ -51,7 +52,7 @@ public sealed partial class Scheduler : IAsyncDisposable
             if (e.RequestId != null || e.Method is "turn/started" or "turn/completed" or "thread/status/changed" or "error" or "account/rateLimits/updated")
                 events.Writer.TryWrite(e);
         };
-        client.Disconnected += reason => events.Writer.TryWrite(new("connection/lost", JsonSerializer.SerializeToElement(new { reason })));
+        client.Disconnected += loss => events.Writer.TryWrite(new("connection/lost", JsonSerializer.SerializeToElement(new { reason = loss.Reason }), ConnectionId: loss.ConnectionId));
     }
 
     public async Task ConnectAsync(string executable, bool exclusiveOwnership, CancellationToken ct = default)
@@ -59,9 +60,10 @@ public sealed partial class Scheduler : IAsyncDisposable
         await InGateAsync(async () =>
         {
             if (!exclusiveOwnership || !ownershipStillValid()) throw new InvalidOperationException("Close Codex Desktop and other clients, then explicitly confirm exclusive ownership.");
-            if (!connected) await client.ConnectAsync(executable, ct);
-            else if (executable != state.CodexPath) throw new InvalidOperationException("Restart AutoResume to change its executable.");
+            if (!IsConnected) await client.ConnectAsync(executable, ct);
+            else if (executable != state.CodexPath) throw new InvalidOperationException("The connected server is healthy; its executable stays fixed until that connection ends.");
             state.CodexPath = executable;
+            connectionId = client.ConnectionId;
             connected = ownershipConfirmed = true;
             foreach (var row in state.Conversations) row.ObservationOnly = false;
             Log("Connected to owned Codex app-server. Desktop UI synchronization is unsupported.");
@@ -196,7 +198,7 @@ public sealed partial class Scheduler : IAsyncDisposable
 
     public Task TickAsync(CancellationToken ct = default) => InGateAsync(async () =>
     {
-        if (!connected || storageFault) return;
+        if (!IsConnected || storageFault) return;
         if (!ownershipConfirmed)
         {
             if (now() >= nextPoll) await RefreshObservationCoreAsync(ct);
@@ -432,10 +434,16 @@ public sealed partial class Scheduler : IAsyncDisposable
             {
                 await InGateAsync(async () =>
                 {
+                    if (e.ConnectionId != connectionId) return;
                     if (e.Method == "connection/lost")
                     {
                         connected = ownershipConfirmed = false; state.Enabled = false;
-                        foreach (var row in state.Conversations) { row.Revalidated = false; row.ObservedActive = false; row.ObservedAt = null; Attention(row, "Connection lost. Restart and reconcile before retrying."); }
+                        foreach (var row in state.Conversations)
+                        {
+                            row.Revalidated = false; row.ObservedActive = false; row.ObservedAt = null;
+                            const string reason = "Connection lost. Automatic read-only reconnection will revalidate this chat; execution requires a new handoff.";
+                            if (row.ExecutionActive || Uncertain(row) || !row.ObservationOnly) Attention(row, reason); else row.Reason = reason;
+                        }
                         Log("App-server disconnected; scheduling OFF."); Commit(); return;
                     }
                     var id = Protocol.String(e.Parameters, "threadId");
@@ -553,11 +561,11 @@ public sealed partial class Scheduler : IAsyncDisposable
     }
     private void RequireDiscoveryConnection()
     {
-        if (!connected || storageFault) throw new InvalidOperationException("Connect to Codex before browsing conversations.");
+        if (!IsConnected || storageFault) throw new InvalidOperationException("Connect to Codex before browsing conversations.");
     }
     private void RequireConnection()
     {
-        if (!connected || !ownershipConfirmed || storageFault) throw new InvalidOperationException("Connect with exclusive session ownership before scheduling.");
+        if (!IsConnected || !ownershipConfirmed || storageFault) throw new InvalidOperationException("Connect with exclusive session ownership before scheduling.");
     }
     private void Commit()
     {

@@ -27,8 +27,10 @@ internal sealed class FakeCodex : ICodexClient
     public string? NextTurnError;
     public string? ReadFailureId;
     public event Action<CodexEvent>? EventReceived;
-    public event Action<string>? Disconnected;
-    public Task ConnectAsync(string executable, CancellationToken ct) { Connections++; return Task.CompletedTask; }
+    public event Action<CodexDisconnection>? Disconnected;
+    public long ConnectionId { get; private set; }
+    public bool IsConnected { get; private set; }
+    public Task ConnectAsync(string executable, CancellationToken ct) { Connections++; ConnectionId++; IsConnected = true; return Task.CompletedTask; }
     public Task<RecentThreadListing> ListRecentAsync(CancellationToken ct) => DiscoveryFails
         ? throw new IOException("Discovery unavailable") : Task.FromResult(new RecentThreadListing(RecentChats.Order(Threads.Values), "Verified active first, then most recent activity. Desktop activity unknown."));
     public Task<IReadOnlyList<ThreadSnapshot>> ListAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<ThreadSnapshot>>(Threads.Values.ToList());
@@ -53,14 +55,15 @@ internal sealed class FakeCodex : ICodexClient
     }
     public Task<UsageSnapshot> ReadUsageAsync(CancellationToken ct) { UsageReads++; return Task.FromResult(Usage); }
     public Task RejectRequestAsync(CodexEvent request, CancellationToken ct) { Rejections++; return Task.CompletedTask; }
-    public void Emit(string method, object parameters, bool request = false) => EventReceived?.Invoke(new(method, JsonSerializer.SerializeToElement(parameters), request ? JsonSerializer.SerializeToElement(9) : null));
+    public void Emit(string method, object parameters, bool request = false) => EventReceived?.Invoke(new(method, JsonSerializer.SerializeToElement(parameters), request ? JsonSerializer.SerializeToElement(9) : null, ConnectionId));
+    public void EmitFromConnection(long id, string method, object parameters) => EventReceived?.Invoke(new(method, JsonSerializer.SerializeToElement(parameters), null, id));
     public void Complete(string id, string status = "completed", string? code = null)
     {
         var turn = Threads[id].LastTurn! with { Status = status, ErrorCode = code };
         Threads[id] = Threads[id] with { RuntimeStatus = "idle", LastTurn = turn };
         Emit("turn/completed", new { threadId = id, turn = new { id = turn.Id, status, error = code == null ? null : new { message = "Limit", codexErrorInfo = code } } });
     }
-    public void Disconnect() => Disconnected?.Invoke("Disconnected");
+    public void Disconnect() { IsConnected = false; Disconnected?.Invoke(new(ConnectionId, "Disconnected")); }
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 

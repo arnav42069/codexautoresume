@@ -10,6 +10,12 @@ Live status belongs to the server answering the request. An independent app-serv
 
 Observation refreshes every 30 seconds and on supported events. **Refresh chats** retries immediately without replacing queue priorities. Failure to list recent chats does not prevent reading the already-selected UUIDs or reconciling AutoResume's existing attempts.
 
+## Reconnection
+
+AutoResume keeps one owned app-server child per connection. If that child exits or its JSON-RPC stream breaks, the utility marks the watcher disconnected, preserves the queue and durable attempt journal, and retries discovery with bounded backoff. A saved CLI path is revalidated on every retry, so an updated npm installation can be found without restarting AutoResume. Concurrent retry requests are coalesced and an old connection's events cannot affect the replacement connection.
+
+Recovery is read-only. It never reacquires execution ownership, resumes a conversation, or resends an uncertain message. Finish active work and close other Codex clients before explicitly acquiring ownership again. A healthy existing connection is not replaced just because a different executable path is entered.
+
 ## Hand off execution
 
 1. Finish active work, close Desktop and other Codex clients.

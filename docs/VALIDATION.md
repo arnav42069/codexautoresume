@@ -44,3 +44,7 @@ Local verification passed 89 core tests and the packaged Linux window/shortcut c
 [Windows run 38957292850](https://github.com/arnav42069/codexautoresume/actions/runs/38957292850) passed native WPF checks with the ownership checkbox unticked during connection, plus official CLI discovery and read-only protocol validation. [Linux/macOS checks](https://github.com/arnav42069/codexautoresume/actions/runs/38957292928) exercise the same native fixture connection through the packaged interfaces. No model turn is submitted by these checks.
 
 [Release validation 38957769813](https://github.com/arnav42069/codexautoresume/actions/runs/38957769813) passed all five native targets for v0.3.0 and verified every public application/diagnostic ZIP against its checksum. The Windows read-only screenshot was inspected after publication; connection remained established with the execution checkbox unticked and scheduling OFF.
+
+## Automatic reconnect
+
+The reconnect update adds coverage for a later CLI discovery retry and for stale events from a retired server generation. The final local core run completed **91 tests: 91 passed, 0 failed**. The cross-platform desktop and Windows WPF projects built with **0 warnings and 0 errors**. The npm launcher suite completed **38 passed, 0 failed, 2 skipped**.

@@ -11,32 +11,61 @@ public sealed class RpcException(string message, JsonElement data) : Exception(m
 
 public sealed partial class AppServerClient : ICodexClient
 {
-    private Process? process;
-    private readonly ConcurrentDictionary<long, TaskCompletionSource<JsonElement>> pending = new();
-    private readonly SemaphoreSlim writer = new(1, 1);
-    private readonly CancellationTokenSource lifetime = new();
-    private long nextId;
-    private Task? reader;
+    private sealed class Session(Process process, long id)
+    {
+        public readonly Process Process = process;
+        public readonly long Id = id;
+        public readonly ConcurrentDictionary<long, TaskCompletionSource<JsonElement>> Pending = new();
+        public readonly SemaphoreSlim Writer = new(1, 1);
+        public readonly CancellationTokenSource Lifetime = new();
+        public Task Reader = Task.CompletedTask, Errors = Task.CompletedTask;
+        public bool Ready, Lost;
+    }
+    private Session? session;
+    private readonly SemaphoreSlim lifecycle = new(1, 1);
+    private long nextId, generation;
+    private bool disposed;
     public event Action<CodexEvent>? EventReceived;
-    public event Action<string>? Disconnected;
+    public event Action<CodexDisconnection>? Disconnected;
     public string Version { get; private set; } = "";
-    public int? ProcessId => process?.Id;
+    public long ConnectionId => session?.Id ?? 0;
+    public bool IsConnected => session is { Ready: true, Lost: false } current && !current.Process.HasExited;
+    public int? ProcessId => session is { } current && !current.Process.HasExited ? current.Process.Id : null;
 
     public async Task ConnectAsync(string executable, CancellationToken ct)
     {
-        if (process != null) throw new InvalidOperationException("Already connected. Restart the utility to change its Codex executable.");
-        executable = CodexExecutableResolver.Resolve(executable);
-        Version = (await CodexDiscovery.ValidateAsync(executable, ct)).Version;
-        var info = NewProcess(executable);
-        info.ArgumentList.Add("app-server");
-        info.ArgumentList.Add("--listen");
-        info.ArgumentList.Add("stdio://");
-        process = Process.Start(info) ?? throw new IOException("Cannot start Codex app-server.");
-        // Drain stderr to avoid a blocked child. Never expose configuration or credential output.
-        _ = DrainErrorsAsync(process.StandardError);
-        reader = ReadLoopAsync();
-        await CallAsync("initialize", new { clientInfo = new { name = "codex_autoresume", title = "Codex AutoResume", version = "0.3.0" } }, ct);
-        await WriteAsync(new { method = "initialized", @params = new { } }, ct);
+        await lifecycle.WaitAsync(ct);
+        try
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (IsConnected) return;
+            if (session is { } old)
+            {
+                if (!old.Process.HasExited)
+                    throw new IOException("The previous AutoResume server is still running; no second server will be launched.");
+                await RetireAsync(old); session = null;
+            }
+            executable = CodexExecutableResolver.Resolve(executable);
+            Version = (await CodexDiscovery.ValidateAsync(executable, ct)).Version;
+            var info = NewProcess(executable);
+            info.ArgumentList.Add("app-server"); info.ArgumentList.Add("--listen"); info.ArgumentList.Add("stdio://");
+            var current = new Session(Process.Start(info) ?? throw new IOException("Cannot start Codex app-server."), ++generation);
+            session = current;
+            current.Errors = DrainErrorsAsync(current.Process.StandardError);
+            current.Reader = ReadLoopAsync(current);
+            try
+            {
+                await CallAsync(current, "initialize", new { clientInfo = new { name = "codex_autoresume", title = "Codex AutoResume", version = "0.3.0" } }, ct);
+                await WriteAsync(current, new { method = "initialized", @params = new { } }, ct);
+                if (current.Lost || current.Process.HasExited) throw new IOException("Codex exited during initialization.");
+                current.Ready = true;
+            }
+            catch
+            {
+                await RetireAsync(current); session = null; throw;
+            }
+        }
+        finally { lifecycle.Release(); }
     }
 
     private static ProcessStartInfo NewProcess(string executable) => new(executable)
@@ -48,16 +77,16 @@ public sealed partial class AppServerClient : ICodexClient
     private static async Task DrainErrorsAsync(StreamReader errors)
     {
         try { while (await errors.ReadLineAsync() != null) { } }
-        catch (IOException) { }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException) { }
     }
 
-    private async Task ReadLoopAsync()
+    private async Task ReadLoopAsync(Session current)
     {
         try
         {
-            while (!lifetime.IsCancellationRequested)
+            while (!current.Lifetime.IsCancellationRequested)
             {
-                var line = await process!.StandardOutput.ReadLineAsync(lifetime.Token);
+                var line = await current.Process.StandardOutput.ReadLineAsync(current.Lifetime.Token);
                 if (line == null) throw new IOException("Codex app-server disconnected. Reconcile attempts before retrying.");
                 using var doc = JsonDocument.Parse(line);
                 var root = doc.RootElement;
@@ -65,9 +94,9 @@ public sealed partial class AppServerClient : ICodexClient
                 {
                     var parameters = root.TryGetProperty("params", out var p) ? p.Clone() : JsonSerializer.SerializeToElement(new { });
                     EventReceived?.Invoke(new(method.GetString()!, parameters,
-                        root.TryGetProperty("id", out var reqId) ? reqId.Clone() : null));
+                        root.TryGetProperty("id", out var reqId) ? reqId.Clone() : null, current.Id));
                 }
-                else if (root.TryGetProperty("id", out var id) && id.TryGetInt64(out var key) && pending.TryRemove(key, out var completion))
+                else if (root.TryGetProperty("id", out var id) && id.TryGetInt64(out var key) && current.Pending.TryRemove(key, out var completion))
                 {
                     if (root.TryGetProperty("error", out var error))
                         completion.TrySetException(new RpcException(Protocol.String(error, "message") ?? "Codex request failed.", error.Clone()));
@@ -78,35 +107,41 @@ public sealed partial class AppServerClient : ICodexClient
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            foreach (var pair in pending) pair.Value.TrySetException(new IOException("Codex connection lost; delivery may be uncertain.", ex));
-            pending.Clear();
-            if (!lifetime.IsCancellationRequested) Disconnected?.Invoke("Codex connection lost; automatic scheduling stopped.");
+            current.Lost = true;
+            foreach (var pair in current.Pending) pair.Value.TrySetException(new IOException("Codex connection lost; delivery may be uncertain.", ex));
+            current.Pending.Clear();
+            if (!current.Lifetime.IsCancellationRequested) Disconnected?.Invoke(new(current.Id, "Codex connection lost; automatic scheduling stopped."));
         }
     }
 
-    private async Task WriteAsync(object message, CancellationToken ct)
+    private static async Task WriteAsync(Session current, object message, CancellationToken ct)
     {
-        await writer.WaitAsync(ct);
+        await current.Writer.WaitAsync(ct);
         try
         {
-            if (process == null || process.HasExited) throw new IOException("Codex app-server is not connected.");
-            await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(message).AsMemory(), ct);
-            await process.StandardInput.FlushAsync(ct);
+            if (current.Lost || current.Process.HasExited) throw new IOException("Codex app-server is not connected.");
+            await current.Process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(message).AsMemory(), ct);
+            await current.Process.StandardInput.FlushAsync(ct);
         }
-        finally { writer.Release(); }
+        finally { current.Writer.Release(); }
     }
 
+    private Task WriteAsync(object message, CancellationToken ct) => WriteAsync(CurrentSession(), message, ct);
+    private Session CurrentSession() => session is { Ready: true, Lost: false } current ? current : throw new IOException("Codex app-server is not connected.");
     private async Task<JsonElement> CallAsync(string method, object parameters, CancellationToken ct)
+        => await CallAsync(CurrentSession(), method, parameters, ct);
+
+    private async Task<JsonElement> CallAsync(Session current, string method, object parameters, CancellationToken ct)
     {
         var id = Interlocked.Increment(ref nextId);
         var completion = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
-        pending[id] = completion;
+        current.Pending[id] = completion;
         try
         {
-            await WriteAsync(new { id, method, @params = parameters }, ct);
+            await WriteAsync(current, new { id, method, @params = parameters }, ct);
             return await completion.Task.WaitAsync(TimeSpan.FromSeconds(45), ct);
         }
-        finally { pending.TryRemove(id, out _); }
+        finally { current.Pending.TryRemove(id, out _); }
     }
 
     public async Task<IReadOnlyList<ThreadSnapshot>> ListAsync(CancellationToken ct)
@@ -174,17 +209,32 @@ public sealed partial class AppServerClient : ICodexClient
             throw new InvalidDataException("Codex returned a different thread UUID. No continuation was sent.");
     }
 
+    private static async Task RetireAsync(Session current)
+    {
+        current.Ready = false; current.Lifetime.Cancel();
+        foreach (var pair in current.Pending) pair.Value.TrySetException(new IOException("Codex connection closed; delivery may be uncertain."));
+        try { current.Process.StandardInput.Close(); } catch (IOException) { }
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        try { await current.Process.WaitForExitAsync(timeout.Token); }
+        catch (OperationCanceledException)
+        {
+            try { current.Process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+            await current.Process.WaitForExitAsync();
+        }
+        await current.Reader; await current.Errors;
+        current.Process.Dispose(); current.Lifetime.Dispose(); current.Writer.Dispose();
+    }
+
     public async ValueTask DisposeAsync()
     {
-        lifetime.Cancel();
-        if (process != null)
+        await lifecycle.WaitAsync();
+        try
         {
-            process.StandardInput.Close();
-            if (reader != null) await reader;
-            process.Dispose();
+            if (disposed) return;
+            disposed = true;
+            if (session is { } current) { await RetireAsync(current); session = null; }
         }
-        lifetime.Dispose();
-        writer.Dispose();
+        finally { lifecycle.Release(); }
     }
 }
 

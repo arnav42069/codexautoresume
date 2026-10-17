@@ -16,6 +16,7 @@ A desktop app that resumes interrupted Codex work when usage is available again.
 - See live status, elapsed time and verified reset estimates.
 - Windows: a Phosphor dashboard with saved colors and reduced motion. The pink is a preview.
 - Keep your queue across restarts. Review uncertain attempts before retrying.
+- Reconnect automatically if Codex starts later, the CLI is updated, or the app-server drops. The queue is preserved and scheduling stays OFF until ownership is confirmed again.
 
 Completed work stays completed. Switching **OFF** stops future continuations while active work finishes.
 

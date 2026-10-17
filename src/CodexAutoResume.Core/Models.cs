@@ -78,12 +78,15 @@ public record UsageSnapshot(bool? OrdinaryUsageAllowed, bool Exhausted, DateTime
 {
     public bool CanResume => OrdinaryUsageAllowed == true && !Exhausted;
 }
-public record CodexEvent(string Method, JsonElement Parameters, JsonElement? RequestId = null);
+public record CodexEvent(string Method, JsonElement Parameters, JsonElement? RequestId = null, long ConnectionId = 0);
+public record CodexDisconnection(long ConnectionId, string Reason);
 
 public interface ICodexClient : IAsyncDisposable
 {
     event Action<CodexEvent>? EventReceived;
-    event Action<string>? Disconnected;
+    event Action<CodexDisconnection>? Disconnected;
+    long ConnectionId { get; }
+    bool IsConnected { get; }
     Task ConnectAsync(string executable, CancellationToken ct);
     Task<IReadOnlyList<ThreadSnapshot>> ListAsync(CancellationToken ct);
     Task<RecentThreadListing> ListRecentAsync(CancellationToken ct);

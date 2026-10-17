@@ -6,8 +6,9 @@ public sealed partial class Scheduler
     {
         await InGateAsync(async () =>
         {
-            if (connected) return;
+            if (IsConnected) return;
             await client.ConnectAsync(executable, ct);
+            connectionId = client.ConnectionId;
             connected = true; ownershipConfirmed = false; state.Enabled = false;
             state.CodexPath = executable;
             foreach (var row in state.Conversations.Where(c => !c.ExecutionActive && !Uncertain(c)))
